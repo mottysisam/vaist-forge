@@ -52,9 +52,10 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     for (int channel = 0; channel < numChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
+        float currentVolume = *volume;
 
         for (int sample = 0; sample < numSamples; ++sample) {
-            channelData[sample] *= *volume;
+            channelData[sample] *= currentVolume;
         }
     }
 }
@@ -65,13 +66,13 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     // Save state
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*volume);
+    stream.writeFloat(volume->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     // Load state
     juce::MemoryInputStream stream(data, static_cast<size_t> (sizeInBytes), false);
-    *volume = stream.readFloat();
+    volume->setValueNotifyingHost(stream.readFloat());
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
