@@ -5,17 +5,35 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
     // Set up sliders
-    gainSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(gainSlider);
-    gainAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getGainParam(), gainSlider, nullptr);
-    gainLabel.setText("Gain", juce::dontSendNotification);
-    gainLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(gainLabel);
+    driveAmountSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    driveAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(driveAmountSlider);
+    driveAmountAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getDriveAmountParam(), driveAmountSlider, nullptr);
+    driveAmountLabel.setText("Drive", juce::dontSendNotification);
+    driveAmountLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(driveAmountLabel);
+
+    outputLevelSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    outputLevelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(outputLevelSlider);
+    outputLevelAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getOutputLevelParam(), outputLevelSlider, nullptr);
+    outputLevelLabel.setText("Output", juce::dontSendNotification);
+    outputLevelLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(outputLevelLabel);
+
+    mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(mixSlider);
+    mixAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getMixParam(), mixSlider, nullptr);
+    mixLabel.setText("Mix", juce::dontSendNotification);
+    mixLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(mixLabel);
 
 
-    setSize(400, 160);
+    setSize(400, 280);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -26,7 +44,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("VolumeControl", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("SaturatorMkI", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -34,8 +52,16 @@ void VAIstAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40);  // Space for title
 
-    auto gainArea = area.removeFromTop(60);
-    gainLabel.setBounds(gainArea.removeFromTop(20));
-    gainSlider.setBounds(gainArea);
+    auto driveAmountArea = area.removeFromTop(60);
+    driveAmountLabel.setBounds(driveAmountArea.removeFromTop(20));
+    driveAmountSlider.setBounds(driveAmountArea);
+
+    auto outputLevelArea = area.removeFromTop(60);
+    outputLevelLabel.setBounds(outputLevelArea.removeFromTop(20));
+    outputLevelSlider.setBounds(outputLevelArea);
+
+    auto mixArea = area.removeFromTop(60);
+    mixLabel.setBounds(mixArea.removeFromTop(20));
+    mixSlider.setBounds(mixArea);
 
 }
