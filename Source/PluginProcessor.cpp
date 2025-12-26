@@ -6,13 +6,8 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(gainParameter = new juce::AudioParameterFloat(
-        "gain",                // Parameter ID
-        "Gain",               // Parameter Name
-        juce::NormalisableRange<float>(-60.0f, 12.0f, 0.1f), // Range
-        0.0f,                  // Default value (0dB)
-        "dB"                  // Value suffix
-    ));
+    addParameter(gainParam = new juce::AudioParameterFloat(
+        juce::ParameterID{"gain", 1}, "Gain", 0.0f, 2.0f, 1.0f));
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -24,43 +19,51 @@ bool VAIstAudioProcessor::isMidiEffect() const { return false; }
 double VAIstAudioProcessor::getTailLengthSeconds() const { return 0.0; }
 int VAIstAudioProcessor::getNumPrograms() { return 1; }
 int VAIstAudioProcessor::getCurrentProgram() { return 0; }
-void VAIstAudioProcessor::setCurrentProgram(int index) { juce::ignoreUnused(index); }
-const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignoreUnused(index); return {}; }
-void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
+void VAIstAudioProcessor::setCurrentProgram(int) {}
+const juce::String VAIstAudioProcessor::getProgramName(int) { return {}; }
+void VAIstAudioProcessor::changeProgramName(int, const juce::String&) {}
 
-void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    // No specific preparation needed for a simple gain plugin
+void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+{
     juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
-void VAIstAudioProcessor::releaseResources() {
-    // No resources to release for a simple gain plugin
-}
+void VAIstAudioProcessor::releaseResources() {}
 
-bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
-    // Only supports mono or stereo
+bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
+{
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-
-    // This checks if the input layout matches the output layout
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
-
     return true;
 }
 
-void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
-    juce::ignoreUnused(midiMessages);
+void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
     juce::ScopedNoDenormals noDenormals;
+    auto totalNumInputChannels = getTotalNumInputChannels();
+    auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    float gainValue = juce::Decibels::decibelsToGain(gainParameter->getValue());
+    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+        buffer.clear(i, 0, buffer.getNumSamples());
 
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
+    // Get parameter value
+    float gain = gainParam->get();
+
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
         auto* channelData = buffer.getWritePointer(channel);
+        int numSamples = buffer.getNumSamples();
 
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-            channelData[sample] *= gainValue;
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            // === AI_LOGIC_START ===
+        for (int sample = 0; sample < numSamples; ++sample) {
+    channelData[sample] *= gain;
+}
+        // === AI_LOGIC_END ===
         }
     }
 }
@@ -68,16 +71,19 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
-void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
+{
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(gainParameter->getValue());
+    stream.writeFloat(gainParam->get());
 }
 
-void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
+void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
+{
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    gainParameter->setValueNotifyingHost(stream.readFloat());
+    *gainParam = stream.readFloat();
 }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
     return new VAIstAudioProcessor();
 }
