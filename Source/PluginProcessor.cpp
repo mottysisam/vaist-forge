@@ -7,31 +7,43 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(rateParam = new juce::AudioParameterFloat(
-        "rate",
+    addParameter(rateHzParam = new juce::AudioParameterFloat(
+        "rateHz",
         "Rate",
         0.1f,
-        20.0f,
-        5.0f
+        10.0f,
+        1.0f
     ));
     addParameter(depthParam = new juce::AudioParameterFloat(
         "depth",
         "Depth",
         0.0f,
         1.0f,
-        0.5f
+        0.7f
     ));
-    addParameter(waveformParam = new juce::AudioParameterFloat(
-        "waveform",
-        "Waveform",
+    addParameter(feedbackParam = new juce::AudioParameterFloat(
+        "feedback",
+        "Feedback",
+        -0.95f,
+        0.95f,
+        0.4f
+    ));
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        "mix",
+        "Mix",
         0.0f,
         1.0f,
-        0.0f
+        0.5f
+    ));
+    addParameter(gainParam = new juce::AudioParameterFloat(
+        "gain",
+        "Gain",
+        0.0f,
+        1.0f,
+        0.5f
     ));
 
-    // Initialize gain-related variables
-    gain = 0.5f; // Initial gain value (0.0 to 1.0)
-    gainSmoothed = gain;
+    gainSmoothed = 0.0f;
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -52,7 +64,6 @@ void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     //juce::ignoreUnused(sampleRate, samplesPerBlock);
     // No special initialization needed
     currentSampleRate = sampleRate;
-    
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -62,8 +73,10 @@ bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
+
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
+
     return true;
 }
 
@@ -75,9 +88,11 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values
-    const float rate = rateParam->get();
+    const float rateHz = rateHzParam->get();
     const float depth = depthParam->get();
-    const float waveform = waveformParam->get();
+    const float feedback = feedbackParam->get();
+    const float mix = mixParam->get();
+    const float gain = gainParam->get();
 
     // DSP Processing
     // Convert dB to linear
@@ -86,7 +101,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     // Smooth gain changes
     const float targetGain = gainLinear;
-    gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(currentSampleRate)) * (targetGain - gainSmoothed);
+    gainSmoothed = gainSmoothed + (0.001f * currentSampleRate) * (targetGain - gainSmoothed);
     const float smoothGain = gainSmoothed;
 
     // Apply gain to all channels
