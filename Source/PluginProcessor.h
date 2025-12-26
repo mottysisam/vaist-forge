@@ -35,13 +35,11 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getDriveAmountParam() { return driveAmountParam; }
-    juce::AudioParameterFloat* getOutputLevelParam() { return outputLevelParam; }
+    juce::AudioParameterFloat* getGainParam() { return gainParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* driveAmountParam = nullptr;
-    juce::AudioParameterFloat* outputLevelParam = nullptr;
+    juce::AudioParameterFloat* gainParam = nullptr;
 
     // DSP state
     float gainSmoothed = 1.0f;
