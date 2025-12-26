@@ -38,9 +38,10 @@ bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+    if (layouts.getMainInputChannelSet() != juce::AudioChannelSet::mono()
+     && layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-    return true;
+    return layouts.getMainOutputChannelSet() == layouts.getMainInputChannelSet();
 }
 
 void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
