@@ -7,12 +7,12 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(volumeParam = new juce::AudioParameterFloat(
-        "volume",
-        "Volume",
-        0.0f,
+    addParameter(panAmountParam = new juce::AudioParameterFloat(
+        "panAmount",
+        "Pan",
+        -1.0f,
         1.0f,
-        0.5f
+        0.0f
     ));
 }
 
@@ -56,11 +56,11 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values
-        const float volume = volumeParam->get();
+        const float panAmount = panAmountParam->get();
 
     // DSP Processing
         // Convert dB to linear
-        const float gainDb = volume * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
+        const float gainDb = gain * 24.0f - 12.0f;  // Range: -12.0 to +12.0 dB
         const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
 
         // Smooth gain changes
