@@ -5,12 +5,18 @@ System prompts and templates for JUCE 8 code generation.
 Supports two modes:
 1. Template-based: AI only generates DSP logic to inject into pre-built templates
 2. Full generation: AI generates complete files (fallback for unsupported types)
+
+Includes Architect Verification Gate integration to prevent AI hallucinations
+by providing exact variable names that are available in each template.
 """
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.template_manager import PluginTemplate
+
+# Import CodeVerifier for exact identifier lists
+from backend.code_verifier import CodeVerifier
 
 
 # =============================================================================
@@ -24,13 +30,26 @@ The plugin template and boilerplate are already provided - you just fill in the 
 
 CRITICAL: Output ONLY the inner-loop DSP code. No includes, no class definitions, no function signatures.
 
-AVAILABLE VARIABLES:
+=== EXACT IDENTIFIERS YOU MUST USE ===
+{exact_identifiers}
+
+=== TEMPLATE CONTEXT ===
 {available_params}
 
-CONSTRAINTS:
+=== CONSTRAINTS ===
 {constraints}
 
-OUTPUT FORMAT:
+=== CRITICAL: IDENTIFIER RULES ===
+1. Use ONLY the exact variable names listed above
+2. DO NOT invent new variable names or use variations like:
+   - "mixParameter" (WRONG) → use "mixParam" (CORRECT)
+   - "driveValue" (WRONG) → use "drive" (CORRECT)
+   - "gainAmount" (WRONG) → use "gain" (CORRECT)
+   - "samples" (WRONG) → use "numSamples" (CORRECT)
+3. Parameters use ->get() to read values: driveParam->get()
+4. Variables are already declared, use them directly: channelData[sample]
+
+=== OUTPUT FORMAT ===
 Output ONLY the C++ code that goes between the markers. Example:
 
 ```cpp
@@ -241,13 +260,20 @@ def get_repair_prompt(error_message: str, original_code: str, filename: str) -> 
     )
 
 
-def get_template_prompt(template: "PluginTemplate", user_prompt: str) -> str:
+def get_template_prompt(
+    template: "PluginTemplate",
+    user_prompt: str,
+    plugin_type: str = None
+) -> str:
     """
     Generate a prompt for template-based logic injection.
+
+    Includes exact identifier lists from CodeVerifier to prevent AI hallucinations.
 
     Args:
         template: The PluginTemplate with available params and constraints
         user_prompt: User's plugin description
+        plugin_type: Optional plugin type for CodeVerifier context (e.g., "waveshaper")
 
     Returns:
         Complete prompt asking AI to generate only the DSP logic
@@ -258,8 +284,17 @@ def get_template_prompt(template: "PluginTemplate", user_prompt: str) -> str:
     # Format constraints as bullet list
     constraints_str = "\n".join(f"- {c}" for c in template.constraints)
 
+    # Get exact identifiers from CodeVerifier (Architect Verification Gate)
+    exact_ids_str = ""
+    if plugin_type:
+        exact_ids_str = CodeVerifier.get_context_prompt(plugin_type)
+    else:
+        # Fallback: use template's available_params
+        exact_ids_str = "Use the variables listed in TEMPLATE CONTEXT below."
+
     # Build the system prompt
     system = TEMPLATE_SYSTEM_PROMPT.format(
+        exact_identifiers=exact_ids_str,
         available_params=params_str,
         constraints=constraints_str,
     )

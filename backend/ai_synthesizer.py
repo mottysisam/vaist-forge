@@ -22,6 +22,7 @@ from backend.prompts.system_prompts import (
 )
 from backend.code_parser import CodeParser
 from backend.template_manager import TemplateManager, PluginType, PluginTemplate
+from backend.code_verifier import CodeVerifier, verify_before_commit
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,8 @@ class AISynthesizer:
             logger.info(f"Using {plugin_type.value} template")
 
             # Build prompt asking for just DSP logic
-            prompt = get_template_prompt(template, user_prompt)
+            # Include plugin_type for CodeVerifier exact identifier context
+            prompt = get_template_prompt(template, user_prompt, plugin_type.value)
 
             # Generate DSP logic with Gemini
             logger.info("Generating DSP logic with Gemini (template mode)")
@@ -159,6 +161,34 @@ class AISynthesizer:
             is_valid, validation_error = CodeParser.validate_logic(logic)
             if not is_valid:
                 return None, None, f"Logic validation failed: {validation_error}"
+
+            # === ARCHITECT VERIFICATION GATE ===
+            # Verify identifiers against template context before injection
+            logger.info("Running Architect Verification Gate...")
+            is_verified, verified_logic, verification_errors = verify_before_commit(
+                logic, plugin_type.value
+            )
+
+            if not is_verified:
+                logger.warning(f"Verification found issues: {verification_errors}")
+                # Attempt AI-assisted repair
+                repaired_logic = await self._repair_logic_with_ai(
+                    logic, verification_errors, plugin_type
+                )
+                if repaired_logic:
+                    logic = repaired_logic
+                    logger.info("AI-assisted repair successful")
+                else:
+                    # Use auto-corrected version if available
+                    if verified_logic and verified_logic != logic:
+                        logic = verified_logic
+                        logger.info("Using auto-corrected logic")
+                    else:
+                        return None, None, f"Verification failed: {', '.join(verification_errors)}"
+            else:
+                # Use verified (possibly auto-corrected) logic
+                logic = verified_logic or logic
+                logger.info("Architect Verification Gate: PASSED")
 
             # Inject logic into template
             processor_code = TemplateManager.inject_logic(
@@ -320,3 +350,98 @@ class AISynthesizer:
         except Exception as e:
             logger.exception("Gemini repair error")
             return None, f"Code repair failed: {str(e)}"
+
+    async def _repair_logic_with_ai(
+        self,
+        logic_code: str,
+        errors: list,
+        plugin_type: PluginType,
+    ) -> Optional[str]:
+        """
+        Use AI to fix undeclared identifier errors in logic.
+
+        This is the Architect agent's repair capability.
+
+        Args:
+            logic_code: The problematic logic code
+            errors: List of error messages (undeclared identifiers)
+            plugin_type: Plugin template type
+
+        Returns:
+            Repaired logic code or None if repair fails
+        """
+        # Get the valid identifiers context
+        context = CodeVerifier.get_context_prompt(plugin_type.value)
+
+        repair_prompt = f"""Fix the following C++ DSP logic code. It has undeclared identifier errors.
+
+ERRORS:
+{chr(10).join(f'- {e}' for e in errors)}
+
+{context}
+
+ORIGINAL CODE:
+```cpp
+{logic_code}
+```
+
+TASK: Rewrite the code using ONLY the identifiers listed above.
+Replace any unknown variables with the correct ones from the list.
+Return ONLY the corrected code between ``` markers, no explanations."""
+
+        # Try Claude first (better at precise fixes)
+        if self.claude_client:
+            try:
+                logger.info("Attempting AI logic repair with Claude")
+                message = self.claude_client.messages.create(
+                    model=self.settings.CLAUDE_MODEL,
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": repair_prompt}],
+                )
+
+                response_text = message.content[0].text
+                repaired = CodeParser.extract_logic_block(response_text)
+
+                if repaired:
+                    # Verify the repair
+                    is_valid, _, remaining_errors = verify_before_commit(
+                        repaired, plugin_type.value
+                    )
+                    if is_valid:
+                        logger.info("Claude repair successful and verified")
+                        return repaired
+                    else:
+                        logger.warning(f"Claude repair still has errors: {remaining_errors}")
+
+            except Exception as e:
+                logger.warning(f"Claude repair failed: {e}")
+
+        # Fallback to Gemini
+        try:
+            logger.info("Attempting AI logic repair with Gemini")
+            response = self.gemini_client.models.generate_content(
+                model=self.settings.GEMINI_MODEL,
+                contents=repair_prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=1024,
+                ),
+            )
+
+            if response.text:
+                repaired = CodeParser.extract_logic_block(response.text)
+
+                if repaired:
+                    # Verify the repair
+                    is_valid, _, remaining_errors = verify_before_commit(
+                        repaired, plugin_type.value
+                    )
+                    if is_valid:
+                        logger.info("Gemini repair successful and verified")
+                        return repaired
+                    else:
+                        logger.warning(f"Gemini repair still has errors: {remaining_errors}")
+
+        except Exception as e:
+            logger.warning(f"Gemini repair failed: {e}")
+
+        return None
