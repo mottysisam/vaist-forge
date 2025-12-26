@@ -43,8 +43,13 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    compressor.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (juce::uint32)getTotalNumOutputChannels() });
-    gain.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (juce::uint32)getTotalNumOutputChannels() });
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+    spec.numChannels = (juce::uint32)getTotalNumOutputChannels();
+
+    compressor.prepare(spec);
+    gain.prepare(spec);
 
     lastSampleRate = sampleRate;
 }
