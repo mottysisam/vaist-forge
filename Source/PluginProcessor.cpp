@@ -86,7 +86,7 @@ void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 }
 
 void VAIstAudioProcessor::updateFilter() {
-    *filter.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass(
+    filter.coefficients = juce::dsp::IIR::Coefficients<float>::makeLowPass(
         getSampleRate(),
         cutoff->get(),
         resonance->get()
