@@ -11,7 +11,7 @@ The AI cannot introduce bugs because it never writes C++ directly.
 """
 
 import logging
-from typing import Tuple
+from typing import Tuple, Dict
 
 from backend.schemas import (
     PluginResponse,
@@ -601,14 +601,154 @@ void VAIstAudioProcessorEditor::resized()
 """)
         return "\n".join(lines)
 
+    # =========================================================================
+    # Header File Generation
+    # =========================================================================
+
+    @classmethod
+    def generate_processor_h(cls, response: PluginResponse) -> str:
+        """
+        Generate complete PluginProcessor.h from schema.
+
+        This declares all parameters, member variables, and getter methods.
+        """
+        # Generate parameter declarations
+        param_declarations = cls.generate_parameter_declarations(response.parameters)
+
+        # Generate getter declarations
+        getter_declarations = cls.generate_parameter_getters(response.parameters)
+
+        # Generate DSP member variables
+        member_vars = cls._generate_member_variables(response)
+
+        return f'''#pragma once
+
+#include <juce_audio_processors/juce_audio_processors.h>
+
+class VAIstAudioProcessor : public juce::AudioProcessor
+{{
+public:
+    VAIstAudioProcessor();
+    ~VAIstAudioProcessor() override;
+
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
+
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override;
+
+    const juce::String getName() const override;
+
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    bool isMidiEffect() const override;
+    double getTailLengthSeconds() const override;
+
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
+    void changeProgramName(int index, const juce::String& newName) override;
+
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
+
+    // Parameter getters
+{getter_declarations}
+
+private:
+    // Parameters
+{param_declarations}
+
+    // DSP state
+{member_vars}
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessor)
+}};
+'''
+
+    @classmethod
+    def generate_editor_h(cls, response: PluginResponse) -> str:
+        """
+        Generate complete PluginEditor.h from schema.
+
+        This declares all sliders, labels, and attachments.
+        """
+        # Generate slider/label/attachment declarations
+        slider_declarations = cls._generate_editor_member_declarations(response.parameters)
+
+        return f'''#pragma once
+
+#include "PluginProcessor.h"
+
+class VAIstAudioProcessorEditor : public juce::AudioProcessorEditor
+{{
+public:
+    explicit VAIstAudioProcessorEditor(VAIstAudioProcessor&);
+    ~VAIstAudioProcessorEditor() override;
+
+    void paint(juce::Graphics&) override;
+    void resized() override;
+
+private:
+    VAIstAudioProcessor& processorRef;
+
+    // UI Components
+{slider_declarations}
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessorEditor)
+}};
+'''
+
+    @classmethod
+    def _generate_editor_member_declarations(cls, params: list[PluginParameter]) -> str:
+        """Generate slider, label, and attachment declarations for editor header."""
+        lines = []
+        for p in params:
+            lines.append(f"    juce::Slider {p.name}Slider;")
+            lines.append(f"    juce::Label {p.name}Label;")
+            lines.append(f"    std::unique_ptr<juce::SliderParameterAttachment> {p.name}Attachment;")
+            lines.append("")  # Empty line between parameter groups
+        return "\n".join(lines)
+
 
 # =============================================================================
 # Convenience Functions
 # =============================================================================
 
-def generate_from_schema(response: PluginResponse) -> Tuple[str, str]:
+def generate_from_schema(response: PluginResponse) -> Dict[str, str]:
     """
-    Generate both processor and editor C++ files from a schema response.
+    Generate all 4 C++ files from a schema response.
+
+    Args:
+        response: Validated PluginResponse from AI
+
+    Returns:
+        Dict with keys: 'processor_h', 'processor_cpp', 'editor_h', 'editor_cpp'
+    """
+    files = {
+        'processor_h': CppGenerator.generate_processor_h(response),
+        'processor_cpp': CppGenerator.generate_processor_cpp(response),
+        'editor_h': CppGenerator.generate_editor_h(response),
+        'editor_cpp': CppGenerator.generate_editor_cpp(response),
+    }
+
+    logger.info(f"Generated C++ for '{response.plugin_name}' ({response.category.value})")
+    logger.info(f"  Parameters: {[p.name for p in response.parameters]}")
+    logger.info(f"  Files: {list(files.keys())}")
+
+    return files
+
+
+def generate_processor_editor_only(response: PluginResponse) -> Tuple[str, str]:
+    """
+    Legacy function: Generate only processor.cpp and editor.cpp.
+
+    For backwards compatibility with existing code.
 
     Args:
         response: Validated PluginResponse from AI
@@ -616,10 +756,5 @@ def generate_from_schema(response: PluginResponse) -> Tuple[str, str]:
     Returns:
         Tuple of (processor_cpp, editor_cpp)
     """
-    processor = CppGenerator.generate_processor_cpp(response)
-    editor = CppGenerator.generate_editor_cpp(response)
-
-    logger.info(f"Generated C++ for '{response.plugin_name}' ({response.category.value})")
-    logger.info(f"  Parameters: {[p.name for p in response.parameters]}")
-
-    return processor, editor
+    files = generate_from_schema(response)
+    return files['processor_cpp'], files['editor_cpp']

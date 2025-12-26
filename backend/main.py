@@ -23,6 +23,7 @@ from backend.task_manager import task_manager
 from backend.ai_synthesizer import AISynthesizer
 from backend.github_manager import GitHubManager
 from backend.bmad_orchestrator import BMADOrchestrator, BMADArtifacts
+from backend.code_verifier import validate_header_consistency
 
 # Configure logging
 logging.basicConfig(
@@ -40,7 +41,9 @@ _github_manager: GitHubManager | None = None
 _bmad_orchestrator: BMADOrchestrator | None = None
 
 # Use BMAD v6 pipeline by default (set to False to use legacy single-agent)
-USE_BMAD_PIPELINE = True
+# TEMPORARILY DISABLED: BMAD doesn't generate header files, causing build failures
+# Schema-based mode (legacy pipeline) generates all 4 files correctly
+USE_BMAD_PIPELINE = False
 
 
 def get_ai_synthesizer() -> AISynthesizer:
@@ -125,16 +128,20 @@ async def generate_plugin_task(task_id: str, prompt: str):
         logger.info(f"[{task_id}] Starting code synthesis...")
         task_manager.update_task(task_id, status=TaskStatus.SYNTHESIZING)
 
+        # Variables to hold header files (only populated by schema-based mode)
+        processor_h = None
+        editor_h = None
+
         if USE_BMAD_PIPELINE:
             # BMAD v6 Pipeline: 4-Phase Gated Pipeline
             logger.info(f"[{task_id}] Using BMAD v6 pipeline")
             bmad = get_bmad_orchestrator()
             processor_code, editor_code, error, bmad_artifacts = await bmad.run_pipeline(prompt)
         else:
-            # Legacy single-agent approach
+            # Legacy single-agent approach (now with schema-based mode)
             logger.info(f"[{task_id}] Using legacy single-agent pipeline")
             ai_synthesizer = get_ai_synthesizer()
-            processor_code, editor_code, error = await ai_synthesizer.generate_code(prompt)
+            processor_code, editor_code, processor_h, editor_h, error = await ai_synthesizer.generate_code(prompt)
 
         if error or not processor_code or not editor_code:
             logger.error(f"[{task_id}] Code synthesis failed: {error}")
@@ -146,11 +153,42 @@ async def generate_plugin_task(task_id: str, prompt: str):
             return
 
         # Store generated code for potential repair
+        generated_code = {"processor": processor_code, "editor": editor_code}
+        if processor_h:
+            generated_code["processor_h"] = processor_h
+        if editor_h:
+            generated_code["editor_h"] = editor_h
+
         task_manager.update_task(
             task_id,
-            generated_code={"processor": processor_code, "editor": editor_code},
+            generated_code=generated_code,
         )
-        logger.info(f"[{task_id}] Code synthesis complete")
+        logger.info(f"[{task_id}] Code synthesis complete (files: {list(generated_code.keys())})")
+
+        # Step 1b: Validate header consistency BEFORE pushing
+        # This catches undeclared identifier errors locally instead of wasting CI time
+        is_consistent, consistency_errors = validate_header_consistency(
+            processor_h, processor_code, editor_h, editor_code
+        )
+
+        if not is_consistent:
+            logger.warning(f"[{task_id}] Header consistency check found issues: {consistency_errors}")
+            # If we have headers but still have errors, it's a generation issue
+            # If we don't have headers, that's expected in fallback mode
+            if processor_h and editor_h:
+                # We have headers but still have errors - regenerate or fail
+                logger.error(f"[{task_id}] Generated code has undeclared identifiers, failing early")
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.FAILED,
+                    error_message=f"Code validation failed: {'; '.join(consistency_errors[:3])}",
+                )
+                return
+            else:
+                # No headers - this will likely fail on CI, but let it try
+                logger.warning(f"[{task_id}] No headers generated - build may fail due to missing declarations")
+        else:
+            logger.info(f"[{task_id}] Header consistency check PASSED")
 
         # Step 2: Push to GitHub
         logger.info(f"[{task_id}] Pushing to GitHub...")
@@ -162,6 +200,8 @@ async def generate_plugin_task(task_id: str, prompt: str):
             processor_code,
             editor_code,
             commit_message=f"vAIst: {short_prompt}",
+            processor_h=processor_h,  # Schema-based mode generates headers
+            editor_h=editor_h,        # Schema-based mode generates headers
         )
 
         if push_error:
@@ -328,6 +368,25 @@ async def attempt_repair(
         processor_code = fixed_processor or task.generated_code["processor"]
         editor_code = task.generated_code["editor"]
 
+    # Get header files if they were originally generated (schema mode)
+    processor_h = task.generated_code.get("processor_h")
+    editor_h = task.generated_code.get("editor_h")
+
+    # Validate header consistency before pushing repair
+    is_consistent, consistency_errors = validate_header_consistency(
+        processor_h, processor_code, editor_h, editor_code
+    )
+
+    if not is_consistent:
+        if processor_h and editor_h:
+            # We have headers but still have errors after repair
+            logger.warning(f"[{task_id}] Repair still has undeclared identifiers: {consistency_errors}")
+            # Don't fail immediately on repair - let CI try (repair might have fixed it differently)
+        else:
+            logger.warning(f"[{task_id}] No headers for repair validation")
+    else:
+        logger.info(f"[{task_id}] Repair passed header consistency check")
+
     # Push repaired code
     task_manager.update_task(task_id, status=TaskStatus.PUSHING)
 
@@ -335,6 +394,8 @@ async def attempt_repair(
         processor_code,
         editor_code,
         commit_message=f"vAIst: Repair attempt {task.retry_count + 1}",
+        processor_h=processor_h,
+        editor_h=editor_h,
     )
 
     if push_error:
@@ -346,11 +407,17 @@ async def attempt_repair(
         return
 
     # Update and continue monitoring
+    generated_code = {"processor": processor_code, "editor": editor_code}
+    if processor_h:
+        generated_code["processor_h"] = processor_h
+    if editor_h:
+        generated_code["editor_h"] = editor_h
+
     task_manager.update_task(
         task_id,
         status=TaskStatus.BUILDING,
         commit_sha=commit_sha,
-        generated_code={"processor": processor_code, "editor": editor_code},
+        generated_code=generated_code,
     )
 
     logger.info(f"[{task_id}] Repair pushed, monitoring new build...")

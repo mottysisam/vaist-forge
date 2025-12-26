@@ -50,6 +50,8 @@ class GitHubManager:
         processor_code: str,
         editor_code: str,
         commit_message: str = "vAIst: AI-generated plugin update",
+        processor_h: str = None,
+        editor_h: str = None,
     ) -> Tuple[Optional[str], Optional[str]]:
         """
         Push generated code to GitHub repository in a SINGLE commit.
@@ -65,6 +67,8 @@ class GitHubManager:
             processor_code: PluginProcessor.cpp content
             editor_code: PluginEditor.cpp content
             commit_message: Git commit message
+            processor_h: PluginProcessor.h content (optional, uses existing if not provided)
+            editor_h: PluginEditor.h content (optional, uses existing if not provided)
 
         Returns:
             Tuple of (commit_sha, error_message)
@@ -105,6 +109,17 @@ class GitHubManager:
                 ))
                 logger.info(f"Updated CMakeLists.txt with PLUGIN_CODE: {unique_id}")
 
+            # PluginProcessor.h (if provided)
+            if processor_h:
+                processor_h_blob = self.repo.create_git_blob(processor_h, "utf-8")
+                tree_elements.append(InputGitTreeElement(
+                    path="Source/PluginProcessor.h",
+                    mode="100644",
+                    type="blob",
+                    sha=processor_h_blob.sha,
+                ))
+                logger.info("Pushing PluginProcessor.h")
+
             # PluginProcessor.cpp
             processor_blob = self.repo.create_git_blob(processor_code, "utf-8")
             tree_elements.append(InputGitTreeElement(
@@ -114,6 +129,17 @@ class GitHubManager:
                 sha=processor_blob.sha,
             ))
 
+            # PluginEditor.h (if provided)
+            if editor_h:
+                editor_h_blob = self.repo.create_git_blob(editor_h, "utf-8")
+                tree_elements.append(InputGitTreeElement(
+                    path="Source/PluginEditor.h",
+                    mode="100644",
+                    type="blob",
+                    sha=editor_h_blob.sha,
+                ))
+                logger.info("Pushing PluginEditor.h")
+
             # PluginEditor.cpp
             editor_blob = self.repo.create_git_blob(editor_code, "utf-8")
             tree_elements.append(InputGitTreeElement(
@@ -122,6 +148,8 @@ class GitHubManager:
                 type="blob",
                 sha=editor_blob.sha,
             ))
+
+            logger.info(f"Pushing {len(tree_elements)} files in atomic commit")
 
             # Create new tree with all changes
             new_tree = self.repo.create_git_tree(tree_elements, base_tree)

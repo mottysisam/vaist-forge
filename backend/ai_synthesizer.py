@@ -13,7 +13,7 @@ by having Python templates generate the C++ code deterministically.
 
 import json
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 from google import genai
 from google.genai import types
@@ -77,7 +77,7 @@ class AISynthesizer:
     async def generate_code(
         self, user_prompt: str,
         use_schema_mode: bool = True
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
         """
         Generate VST code from user prompt.
 
@@ -91,16 +91,16 @@ class AISynthesizer:
             use_schema_mode: Whether to try schema-based generation first
 
         Returns:
-            Tuple of (processor_code, editor_code, error_message)
-            On success: (code, code, None)
-            On failure: (None, None, error_message)
+            Tuple of (processor_cpp, editor_cpp, processor_h, editor_h, error_message)
+            On success: (code, code, header, header, None)
+            On failure: (None, None, None, None, error_message)
         """
         # === MODE 1: Schema-Based Generation (ZERO TYPOS) ===
         if use_schema_mode:
             logger.info("Attempting schema-based generation (zero-typo mode)")
-            processor, editor, error = await self._generate_with_schema(user_prompt)
-            if processor and editor:
-                return processor, editor, None
+            files, error = await self._generate_with_schema(user_prompt)
+            if files:
+                return files['processor_cpp'], files['editor_cpp'], files['processor_h'], files['editor_h'], None
             logger.warning(f"Schema-based generation failed: {error}")
             # Fall through to template-based mode
 
@@ -114,7 +114,8 @@ class AISynthesizer:
                 user_prompt, plugin_type
             )
             if processor and editor:
-                return processor, editor, None
+                # Template mode: headers are already in repo, return None for them
+                return processor, editor, None, None, None
             logger.warning(f"Template-based generation failed: {error}")
             # Don't fall through to full generation - template should work
 
@@ -124,7 +125,8 @@ class AISynthesizer:
         # Try Gemini first (primary coder)
         processor, editor, error = await self._generate_with_gemini(user_prompt)
         if processor and editor:
-            return processor, editor, None
+            # Full generation: headers are part of full AI output (not yet supported)
+            return processor, editor, None, None, None
 
         logger.warning(f"Gemini generation failed: {error}")
 
@@ -132,15 +134,15 @@ class AISynthesizer:
         if self.claude_client:
             processor, editor, error = await self._generate_with_claude(user_prompt)
             if processor and editor:
-                return processor, editor, None
+                return processor, editor, None, None, None
             logger.warning(f"Claude generation failed: {error}")
-            return None, None, f"All AI models failed. Last error: {error}"
+            return None, None, None, None, f"All AI models failed. Last error: {error}"
 
-        return None, None, f"Gemini failed: {error}. No Claude fallback available."
+        return None, None, None, None, f"Gemini failed: {error}. No Claude fallback available."
 
     async def _generate_with_schema(
         self, user_prompt: str
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
         """
         Generate code using schema-based structured output.
 
@@ -154,7 +156,8 @@ class AISynthesizer:
             user_prompt: User's plugin description
 
         Returns:
-            Tuple of (processor_code, editor_code, error_message)
+            Tuple of (files_dict, error_message)
+            files_dict has keys: processor_h, processor_cpp, editor_h, editor_cpp
         """
         try:
             logger.info("Schema-based generation: AI will output JSON, Python writes C++")
@@ -181,7 +184,7 @@ Remember: Output ONLY valid JSON matching the schema above. No markdown, no expl
             )
 
             if not response.text:
-                return None, None, "Gemini returned empty response for schema mode"
+                return None, "Gemini returned empty response for schema mode"
 
             # Parse JSON response
             try:
@@ -189,7 +192,7 @@ Remember: Output ONLY valid JSON matching the schema above. No markdown, no expl
                 logger.info(f"Schema response: {json.dumps(json_response, indent=2)[:500]}...")
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON: {response.text[:500]}")
-                return None, None, f"AI returned invalid JSON: {str(e)}"
+                return None, f"AI returned invalid JSON: {str(e)}"
 
             # Validate against Pydantic schema
             try:
@@ -198,26 +201,27 @@ Remember: Output ONLY valid JSON matching the schema above. No markdown, no expl
                 logger.info(f"Parameters: {[p.name for p in plugin_response.parameters]}")
             except Exception as e:
                 logger.warning(f"Schema validation failed: {str(e)}")
-                return None, None, f"Schema validation failed: {str(e)}"
+                return None, f"Schema validation failed: {str(e)}"
 
-            # Generate C++ code from validated schema
-            processor_code, editor_code = generate_from_schema(plugin_response)
+            # Generate all 4 C++ files from validated schema
+            files = generate_from_schema(plugin_response)
 
-            # Validate the generated code
+            # Validate the generated .cpp files
             is_valid, validation_error = CodeParser.validate_code(
-                processor_code, editor_code
+                files['processor_cpp'], files['editor_cpp']
             )
             if not is_valid:
                 # This should never happen since we control the templates
                 logger.error(f"Template validation failed (unexpected): {validation_error}")
-                return None, None, f"Template code validation failed: {validation_error}"
+                return None, f"Template code validation failed: {validation_error}"
 
             logger.info(f"Schema-based generation successful: {plugin_response.plugin_name}")
-            return processor_code, editor_code, None
+            logger.info(f"  Generated files: {list(files.keys())}")
+            return files, None
 
         except Exception as e:
             logger.exception("Schema-based generation error")
-            return None, None, f"Schema generation error: {str(e)}"
+            return None, f"Schema generation error: {str(e)}"
 
     async def _generate_with_template(
         self, user_prompt: str, plugin_type: PluginType

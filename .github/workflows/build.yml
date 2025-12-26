@@ -42,9 +42,15 @@ jobs:
       - name: Configure CMake
         run: cmake -B build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE=Release
 
-      # Build the plugin
-      - name: Build
+      # Build the plugin (Windows)
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
         run: cmake --build build --config Release --parallel
+
+      # Build the plugin (macOS with quiet Xcode)
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build build --config Release --parallel -- -quiet
 
       # Find and upload the VST3 artifact
       - name: Find VST3 Artifact
