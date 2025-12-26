@@ -38,10 +38,12 @@ void VAIstAudioProcessor::releaseResources() {
 }
 
 bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
+    // Only supports mono or stereo
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
+    // This checks if the input layout matches the output layout
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
 
