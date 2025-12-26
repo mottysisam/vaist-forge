@@ -21,6 +21,7 @@ from backend.models import (
 from backend.task_manager import task_manager
 from backend.ai_synthesizer import AISynthesizer
 from backend.github_manager import GitHubManager
+from backend.bmad_orchestrator import BMADOrchestrator, BMADArtifacts
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +36,10 @@ settings = get_settings()
 # Initialize components (lazy - will be created on first request)
 _ai_synthesizer: AISynthesizer | None = None
 _github_manager: GitHubManager | None = None
+_bmad_orchestrator: BMADOrchestrator | None = None
+
+# Use BMAD v6 pipeline by default (set to False to use legacy single-agent)
+USE_BMAD_PIPELINE = True
 
 
 def get_ai_synthesizer() -> AISynthesizer:
@@ -53,11 +58,20 @@ def get_github_manager() -> GitHubManager:
     return _github_manager
 
 
+def get_bmad_orchestrator() -> BMADOrchestrator:
+    """Get or create BMAD orchestrator instance."""
+    global _bmad_orchestrator
+    if _bmad_orchestrator is None:
+        _bmad_orchestrator = BMADOrchestrator()
+    return _bmad_orchestrator
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown."""
     logger.info("=" * 60)
     logger.info("vAIst Backend starting...")
+    logger.info(f"  Pipeline Mode: {'BMAD v6 (4-Phase)' if USE_BMAD_PIPELINE else 'Legacy (Single-Agent)'}")
     logger.info(f"  GitHub Repo: {settings.GITHUB_REPO}")
     logger.info(f"  Gemini Model: {settings.GEMINI_MODEL}")
     logger.info(f"  Claude Fallback: {'Enabled' if settings.ANTHROPIC_API_KEY else 'Disabled'}")
@@ -97,17 +111,29 @@ async def generate_plugin_task(task_id: str, prompt: str):
     """
     Background task for the complete plugin generation pipeline.
 
-    Flow: Synthesize -> Push -> Build -> Monitor
+    Flow (BMAD v6): Analyst -> PM -> Architect -> Developer -> Push -> Build -> Monitor
+    Flow (Legacy):  Synthesize -> Push -> Build -> Monitor
     """
-    ai_synthesizer = get_ai_synthesizer()
     github_manager = get_github_manager()
 
+    # Store BMAD artifacts for potential repair
+    bmad_artifacts: BMADArtifacts | None = None
+
     try:
-        # Step 1: Synthesize code with AI
+        # Step 1: Synthesize code with AI (BMAD or legacy)
         logger.info(f"[{task_id}] Starting code synthesis...")
         task_manager.update_task(task_id, status=TaskStatus.SYNTHESIZING)
 
-        processor_code, editor_code, error = await ai_synthesizer.generate_code(prompt)
+        if USE_BMAD_PIPELINE:
+            # BMAD v6 Pipeline: 4-Phase Gated Pipeline
+            logger.info(f"[{task_id}] Using BMAD v6 pipeline")
+            bmad = get_bmad_orchestrator()
+            processor_code, editor_code, error, bmad_artifacts = await bmad.run_pipeline(prompt)
+        else:
+            # Legacy single-agent approach
+            logger.info(f"[{task_id}] Using legacy single-agent pipeline")
+            ai_synthesizer = get_ai_synthesizer()
+            processor_code, editor_code, error = await ai_synthesizer.generate_code(prompt)
 
         if error or not processor_code or not editor_code:
             logger.error(f"[{task_id}] Code synthesis failed: {error}")
@@ -188,7 +214,7 @@ async def generate_plugin_task(task_id: str, prompt: str):
                         f"[{task_id}] Build failed, attempting repair "
                         f"({task.retry_count + 1}/{settings.MAX_RETRY_ATTEMPTS})"
                     )
-                    await attempt_repair(task_id, github_manager, ai_synthesizer)
+                    await attempt_repair(task_id, github_manager, bmad_artifacts)
                     return
                 else:
                     logger.error(f"[{task_id}] Build failed after max retries")
@@ -228,12 +254,13 @@ async def generate_plugin_task(task_id: str, prompt: str):
 async def attempt_repair(
     task_id: str,
     github_manager: GitHubManager,
-    ai_synthesizer: AISynthesizer,
+    bmad_artifacts: BMADArtifacts | None = None,
 ):
     """
     Attempt to repair failed code and retry build.
 
-    Uses Claude for repair as it's better at debugging.
+    BMAD v6: Uses SM Agent to analyze error, Architect to fix tech spec, then Developer to re-execute.
+    Legacy: Uses Claude for direct code repair.
     """
     task = task_manager.get_task(task_id)
     if not task or not task.generated_code:
@@ -256,26 +283,46 @@ async def attempt_repair(
 
     logger.info(f"[{task_id}] Attempting repair with error: {error_msg[:100]}...")
 
-    # Try to repair processor first
-    fixed_processor, repair_error = await ai_synthesizer.repair_code(
-        task.generated_code["processor"],
-        error_msg,
-        "Source/PluginProcessor.cpp",
-    )
-
-    if repair_error:
-        logger.error(f"[{task_id}] Repair failed: {repair_error}")
-        task_manager.update_task(
-            task_id,
-            status=TaskStatus.FAILED,
-            error_message=f"Repair failed: {repair_error}",
+    if USE_BMAD_PIPELINE and bmad_artifacts:
+        # BMAD v6 Repair: SM analyzes -> Architect fixes tech spec -> Developer re-executes
+        logger.info(f"[{task_id}] Using BMAD v6 repair pipeline")
+        bmad = get_bmad_orchestrator()
+        processor_code, editor_code, repair_error, bmad_artifacts = await bmad.repair_with_bmad(
+            error_msg,
+            bmad_artifacts,
+            task.retry_count
         )
-        return
 
-    # Use repaired processor with original editor (simplified)
-    # In production, would also attempt to repair editor if needed
-    processor_code = fixed_processor or task.generated_code["processor"]
-    editor_code = task.generated_code["editor"]
+        if repair_error:
+            logger.error(f"[{task_id}] BMAD repair failed: {repair_error}")
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.FAILED,
+                error_message=f"BMAD repair failed: {repair_error}",
+            )
+            return
+    else:
+        # Legacy repair with Claude
+        logger.info(f"[{task_id}] Using legacy repair pipeline")
+        ai_synthesizer = get_ai_synthesizer()
+        fixed_processor, repair_error = await ai_synthesizer.repair_code(
+            task.generated_code["processor"],
+            error_msg,
+            "Source/PluginProcessor.cpp",
+        )
+
+        if repair_error:
+            logger.error(f"[{task_id}] Repair failed: {repair_error}")
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.FAILED,
+                error_message=f"Repair failed: {repair_error}",
+            )
+            return
+
+        # Use repaired processor with original editor
+        processor_code = fixed_processor or task.generated_code["processor"]
+        editor_code = task.generated_code["editor"]
 
     # Push repaired code
     task_manager.update_task(task_id, status=TaskStatus.PUSHING)
@@ -302,9 +349,63 @@ async def attempt_repair(
         generated_code={"processor": processor_code, "editor": editor_code},
     )
 
-    # Continue monitoring (recursive call with updated code)
-    # Note: This is simplified - in production, use a proper job queue
     logger.info(f"[{task_id}] Repair pushed, monitoring new build...")
+
+    # Monitor the new build with the new commit SHA
+    poll_interval = settings.BUILD_POLL_INTERVAL_SECONDS
+    timeout = settings.BUILD_TIMEOUT_SECONDS
+    max_polls = timeout // poll_interval
+
+    for poll in range(max_polls):
+        await asyncio.sleep(poll_interval)
+
+        status, run_id, url = github_manager.get_workflow_status(commit_sha)
+
+        if run_id:
+            task_manager.update_task(task_id, workflow_run_id=run_id)
+
+        if status == "success":
+            logger.info(f"[{task_id}] Repair build successful!")
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.SUCCESS,
+                workflow_run_id=run_id,
+            )
+            return
+
+        elif status in ("failure", "cancelled"):
+            task = task_manager.get_task(task_id)
+
+            # Attempt another repair if retries available
+            if task and task.retry_count < settings.MAX_RETRY_ATTEMPTS:
+                logger.warning(
+                    f"[{task_id}] Repair build failed, attempting another repair "
+                    f"({task.retry_count + 1}/{settings.MAX_RETRY_ATTEMPTS})"
+                )
+                await attempt_repair(task_id, github_manager, bmad_artifacts)
+                return
+            else:
+                logger.error(f"[{task_id}] Build failed after max retries")
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.FAILED,
+                    workflow_run_id=run_id,
+                    error_message=f"Build failed after {settings.MAX_RETRY_ATTEMPTS} attempts",
+                )
+                return
+
+        elif status == "not_found" and poll < 6:
+            # Give GitHub Actions a few seconds to start
+            logger.debug(f"[{task_id}] Waiting for repair workflow to start...")
+            continue
+
+    # Timeout
+    logger.error(f"[{task_id}] Repair build timed out after {timeout}s")
+    task_manager.update_task(
+        task_id,
+        status=TaskStatus.FAILED,
+        error_message=f"Repair build timed out after {timeout} seconds",
+    )
 
 
 # =============================================================================

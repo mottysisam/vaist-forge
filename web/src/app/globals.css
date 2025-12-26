@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Forge Theme Colors */
+  --color-forge-950: #050505;
+  --color-forge-900: #0a0a0a;
+  --color-forge-800: #1a1a1a;
+  --color-forge-700: #2a2a2a;
+  --color-forge-primary: #ff5c00;
+  --color-forge-glow: #ff8a00;
+  --color-forge-ember: #ff3d00;
+}
+
+/* vAIst Forge Theme - Dark Mode Default */
+:root {
+  --radius: 0.625rem;
+  /* Deep Onyx Background */
+  --background: #050505;
+  --foreground: #f5f5f5;
+  /* Cards with slight transparency */
+  --card: #0a0a0a;
+  --card-foreground: #f5f5f5;
+  --popover: #0a0a0a;
+  --popover-foreground: #f5f5f5;
+  /* Molten Orange Primary */
+  --primary: #ff5c00;
+  --primary-foreground: #ffffff;
+  /* Secondary - Dark Gray */
+  --secondary: #1a1a1a;
+  --secondary-foreground: #f5f5f5;
+  /* Muted States */
+  --muted: #1a1a1a;
+  --muted-foreground: #737373;
+  /* Accent - Glowing Amber */
+  --accent: #ff8a00;
+  --accent-foreground: #ffffff;
+  /* Destructive */
+  --destructive: #dc2626;
+  /* Borders & Inputs */
+  --border: rgba(255, 92, 0, 0.15);
+  --input: #1a1a1a;
+  --ring: #ff5c00;
+  /* Charts - Orange Spectrum */
+  --chart-1: #ff5c00;
+  --chart-2: #ff8a00;
+  --chart-3: #ffb347;
+  --chart-4: #ff6b35;
+  --chart-5: #ff3d00;
+  /* Sidebar */
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #ff5c00;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: rgba(255, 92, 0, 0.1);
+  --sidebar-ring: #ff5c00;
+}
+
+/* Keep dark class for compatibility */
+.dark {
+  --background: #050505;
+  --foreground: #f5f5f5;
+  --card: #0a0a0a;
+  --card-foreground: #f5f5f5;
+  --popover: #0a0a0a;
+  --popover-foreground: #f5f5f5;
+  --primary: #ff5c00;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #f5f5f5;
+  --muted: #1a1a1a;
+  --muted-foreground: #737373;
+  --accent: #ff8a00;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --border: rgba(255, 92, 0, 0.15);
+  --input: #1a1a1a;
+  --ring: #ff5c00;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Forge Custom Utilities */
+@layer utilities {
+  .forge-glow {
+    box-shadow: 0 0 20px rgba(255, 92, 0, 0.3), 0 0 40px rgba(255, 92, 0, 0.1);
+  }
+
+  .forge-glow-text {
+    text-shadow: 0 0 10px rgba(255, 92, 0, 0.5), 0 0 20px rgba(255, 92, 0, 0.3);
+  }
+
+  .forge-glass {
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 92, 0, 0.1);
+  }
+
+  .forge-border {
+    border: 1px solid rgba(255, 92, 0, 0.2);
+  }
+}
+
+/* Forge Animations */
+@keyframes molten-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 92, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 138, 0, 0.8);
+  }
+}
+
+@keyframes forge-glow {
+  from {
+    box-shadow: 0 0 5px #ff5c00;
+  }
+  to {
+    box-shadow: 0 0 20px #ff8a00;
+  }
+}
+
+@keyframes ember-float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-5px) scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.animate-molten-pulse {
+  animation: molten-pulse 2s ease-in-out infinite;
+}
+
+.animate-forge-glow {
+  animation: forge-glow 1.5s ease-in-out infinite alternate;
+}
+
+.animate-ember {
+  animation: ember-float 3s ease-in-out infinite;
+}

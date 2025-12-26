@@ -4,13 +4,30 @@ PyGithub automation for pushing code and monitoring builds.
 """
 
 import logging
+import random
+import re
+import string
 from typing import Optional, Tuple
 
-from github import Github, GithubException
+from github import Github, GithubException, InputGitTreeElement
 
 from backend.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def generate_unique_id() -> str:
+    """
+    Generate a unique 4-character plugin ID for VST3 metadata.
+
+    This prevents DAW scanning conflicts where a new plugin would
+    overwrite an old one because they share the same PLUGIN_CODE.
+
+    Returns:
+        4-character alphanumeric string (e.g., "X7K2", "A3B9")
+    """
+    # Mix of uppercase and digits for uniqueness
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
 
 class GitHubManager:
@@ -35,9 +52,14 @@ class GitHubManager:
         commit_message: str = "vAIst: AI-generated plugin update",
     ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Push generated code to GitHub repository.
+        Push generated code to GitHub repository in a SINGLE commit.
 
         This will trigger the GitHub Actions workflow automatically.
+        Also updates CMakeLists.txt with a unique PLUGIN_CODE to prevent
+        DAW scanning conflicts.
+
+        Uses Git Data API to push all files atomically in one commit,
+        preventing race conditions where partial updates cause build failures.
 
         Args:
             processor_code: PluginProcessor.cpp content
@@ -52,39 +74,70 @@ class GitHubManager:
         try:
             branch = self.settings.GITHUB_BRANCH
 
-            # Get current file contents (need SHA for update)
-            processor_file = self.repo.get_contents(
-                "Source/PluginProcessor.cpp",
-                ref=branch,
-            )
-            editor_file = self.repo.get_contents(
-                "Source/PluginEditor.cpp",
-                ref=branch,
-            )
+            # Generate unique plugin ID
+            unique_id = generate_unique_id()
+            logger.info(f"Generated unique plugin ID: {unique_id}")
 
-            logger.info(f"Updating files on branch: {branch}")
+            # Get current branch reference
+            ref = self.repo.get_git_ref(f"heads/{branch}")
+            base_sha = ref.object.sha
+            base_commit = self.repo.get_git_commit(base_sha)
+            base_tree = base_commit.tree
 
-            # Update PluginProcessor.cpp
-            self.repo.update_file(
+            logger.info(f"Creating atomic commit on branch: {branch}")
+
+            # Get current CMakeLists.txt and update PLUGIN_CODE
+            cmake_file = self.repo.get_contents("CMakeLists.txt", ref=branch)
+            cmake_content = cmake_file.decoded_content.decode('utf-8')
+            updated_cmake = self._update_plugin_code(cmake_content, unique_id)
+
+            # Create blobs for all files
+            tree_elements = []
+
+            # CMakeLists.txt (if changed)
+            if updated_cmake != cmake_content:
+                cmake_blob = self.repo.create_git_blob(updated_cmake, "utf-8")
+                tree_elements.append(InputGitTreeElement(
+                    path="CMakeLists.txt",
+                    mode="100644",
+                    type="blob",
+                    sha=cmake_blob.sha,
+                ))
+                logger.info(f"Updated CMakeLists.txt with PLUGIN_CODE: {unique_id}")
+
+            # PluginProcessor.cpp
+            processor_blob = self.repo.create_git_blob(processor_code, "utf-8")
+            tree_elements.append(InputGitTreeElement(
                 path="Source/PluginProcessor.cpp",
-                message=f"{commit_message} - Processor",
-                content=processor_code,
-                sha=processor_file.sha,
-                branch=branch,
-            )
+                mode="100644",
+                type="blob",
+                sha=processor_blob.sha,
+            ))
 
-            # Update PluginEditor.cpp
-            result = self.repo.update_file(
+            # PluginEditor.cpp
+            editor_blob = self.repo.create_git_blob(editor_code, "utf-8")
+            tree_elements.append(InputGitTreeElement(
                 path="Source/PluginEditor.cpp",
-                message=f"{commit_message} - Editor",
-                content=editor_code,
-                sha=editor_file.sha,
-                branch=branch,
+                mode="100644",
+                type="blob",
+                sha=editor_blob.sha,
+            ))
+
+            # Create new tree with all changes
+            new_tree = self.repo.create_git_tree(tree_elements, base_tree)
+
+            # Create single commit with all changes
+            new_commit = self.repo.create_git_commit(
+                message=commit_message,
+                tree=new_tree,
+                parents=[base_commit],
             )
 
-            commit_sha = result["commit"].sha
-            logger.info(f"Successfully pushed code: {commit_sha}")
-            return commit_sha, None
+            # Update branch reference
+            ref.edit(new_commit.sha)
+
+            logger.info(f"Successfully pushed code (atomic): {new_commit.sha}")
+            return new_commit.sha, None
 
         except GithubException as e:
             error_msg = f"GitHub push failed: {e.data.get('message', str(e))}"
@@ -94,6 +147,30 @@ class GitHubManager:
             error_msg = f"Unexpected error during push: {str(e)}"
             logger.exception(error_msg)
             return None, error_msg
+
+    def _update_plugin_code(self, cmake_content: str, unique_id: str) -> str:
+        """
+        Update PLUGIN_CODE in CMakeLists.txt with unique ID.
+
+        Args:
+            cmake_content: Current CMakeLists.txt content
+            unique_id: 4-character unique plugin ID
+
+        Returns:
+            Updated CMakeLists.txt content
+        """
+        # Match PLUGIN_CODE "XXXX" pattern (4 alphanumeric chars)
+        pattern = r'(PLUGIN_CODE\s+")[A-Z0-9]{4}(")'
+        replacement = rf'\g<1>{unique_id}\g<2>'
+
+        updated = re.sub(pattern, replacement, cmake_content)
+
+        if updated == cmake_content:
+            # Pattern not found - try alternate format
+            pattern2 = r"(PLUGIN_CODE\s+')[A-Z0-9]{4}(')"
+            updated = re.sub(pattern2, rf"\g<1>{unique_id}\g<2>", cmake_content)
+
+        return updated
 
     def get_workflow_status(
         self, commit_sha: str

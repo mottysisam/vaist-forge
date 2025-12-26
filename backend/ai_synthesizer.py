@@ -1,16 +1,27 @@
 """
 vAIst AI Synthesizer
-AI code generation with Gemini 3 Flash (primary) and Claude Opus 4.5 (fallback).
+AI code generation with Gemini (primary) and Claude (fallback).
+
+Supports two generation modes:
+1. Template-based: AI generates only DSP logic, injected into pre-built templates
+2. Full generation: AI generates complete files (fallback for unsupported types)
 """
 
 import logging
 from typing import Optional, Tuple
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from backend.config import Settings
-from backend.prompts.system_prompts import SYSTEM_PROMPT, get_repair_prompt
+from backend.prompts.system_prompts import (
+    SYSTEM_PROMPT,
+    get_repair_prompt,
+    get_template_prompt,
+    get_template_repair_prompt,
+)
 from backend.code_parser import CodeParser
+from backend.template_manager import TemplateManager, PluginType, PluginTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +30,8 @@ class AISynthesizer:
     """
     AI code generation with fallback support.
 
-    Primary: Gemini 3 Flash (fast, cheap, 1M context)
-    Fallback: Claude Opus 4.5 (better at complex debugging)
+    Primary: Gemini (fast, cheap, 1M context)
+    Fallback: Claude (better at complex debugging)
     """
 
     def __init__(self, settings: Settings):
@@ -32,12 +43,8 @@ class AISynthesizer:
         """
         self.settings = settings
 
-        # Initialize Gemini (primary)
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.gemini_model = genai.GenerativeModel(
-            model_name=settings.GEMINI_MODEL,
-            system_instruction=SYSTEM_PROMPT,
-        )
+        # Initialize Gemini client (new google.genai API)
+        self.gemini_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         logger.info(f"Gemini initialized: {settings.GEMINI_MODEL}")
 
         # Initialize Claude (fallback)
@@ -60,6 +67,9 @@ class AISynthesizer:
         """
         Generate VST code from user prompt.
 
+        Uses template-based generation for known plugin types (gain, waveshaper,
+        filter, delay) and falls back to full generation for generic/unknown types.
+
         Args:
             user_prompt: User's plugin description
 
@@ -68,6 +78,23 @@ class AISynthesizer:
             On success: (code, code, None)
             On failure: (None, None, error_message)
         """
+        # Detect plugin type from prompt
+        plugin_type = TemplateManager.detect_plugin_type(user_prompt)
+        logger.info(f"Detected plugin type: {plugin_type.value}")
+
+        # Use template-based generation for known types
+        if plugin_type != PluginType.GENERIC:
+            processor, editor, error = await self._generate_with_template(
+                user_prompt, plugin_type
+            )
+            if processor and editor:
+                return processor, editor, None
+            logger.warning(f"Template-based generation failed: {error}")
+            # Don't fall through to full generation - template should work
+
+        # Full generation for GENERIC type or as primary for unknown
+        logger.info("Using full code generation mode")
+
         # Try Gemini first (primary coder)
         processor, editor, error = await self._generate_with_gemini(user_prompt)
         if processor and editor:
@@ -85,13 +112,90 @@ class AISynthesizer:
 
         return None, None, f"Gemini failed: {error}. No Claude fallback available."
 
+    async def _generate_with_template(
+        self, user_prompt: str, plugin_type: PluginType
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Generate code using template-based logic injection.
+
+        The AI only generates the DSP logic, which is injected into
+        pre-built, validated templates.
+
+        Args:
+            user_prompt: User's plugin description
+            plugin_type: Detected plugin type
+
+        Returns:
+            Tuple of (processor_code, editor_code, error_message)
+        """
+        try:
+            # Get the template for this plugin type
+            template = TemplateManager.get_template(plugin_type)
+            logger.info(f"Using {plugin_type.value} template")
+
+            # Build prompt asking for just DSP logic
+            prompt = get_template_prompt(template, user_prompt)
+
+            # Generate DSP logic with Gemini
+            logger.info("Generating DSP logic with Gemini (template mode)")
+            response = self.gemini_client.models.generate_content(
+                model=self.settings.GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=1024,  # Logic is short
+                ),
+            )
+
+            if not response.text:
+                return None, None, "Gemini returned empty response for logic"
+
+            # Extract DSP logic from response
+            logic = CodeParser.extract_logic_block(response.text)
+            if not logic:
+                logger.warning(f"Failed to extract logic. Response: {response.text[:500]}")
+                return None, None, "Failed to extract DSP logic from AI response"
+
+            # Validate logic for security
+            is_valid, validation_error = CodeParser.validate_logic(logic)
+            if not is_valid:
+                return None, None, f"Logic validation failed: {validation_error}"
+
+            # Inject logic into template
+            processor_code = TemplateManager.inject_logic(
+                template.processor_template, logic
+            )
+            editor_code = template.editor_template  # Editor doesn't need logic injection
+
+            # Validate final code
+            is_valid, validation_error = CodeParser.validate_code(
+                processor_code, editor_code
+            )
+            if not is_valid:
+                return None, None, f"Template code validation failed: {validation_error}"
+
+            logger.info(f"Template-based generation successful ({plugin_type.value})")
+            return processor_code, editor_code, None
+
+        except Exception as e:
+            logger.exception("Template-based generation error")
+            return None, None, f"Template generation error: {str(e)}"
+
     async def _generate_with_gemini(
         self, user_prompt: str
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """Generate code using Gemini."""
         try:
             logger.info("Generating code with Gemini")
-            response = self.gemini_model.generate_content(user_prompt)
+
+            # Use the new google.genai API
+            response = self.gemini_client.models.generate_content(
+                model=self.settings.GEMINI_MODEL,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=8192,
+                ),
+            )
 
             if not response.text:
                 return None, None, "Gemini returned empty response"
@@ -197,7 +301,13 @@ class AISynthesizer:
         # Fallback to Gemini for repair
         try:
             logger.info(f"Attempting code repair with Gemini for {filename}")
-            response = self.gemini_model.generate_content(repair_prompt)
+            response = self.gemini_client.models.generate_content(
+                model=self.settings.GEMINI_MODEL,
+                contents=repair_prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=8192,
+                ),
+            )
 
             if response.text:
                 fixed_code = CodeParser.extract_single_file(response.text, filename)

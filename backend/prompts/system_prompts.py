@@ -1,10 +1,55 @@
 """
 vAIst AI Prompts
 System prompts and templates for JUCE 8 code generation.
+
+Supports two modes:
+1. Template-based: AI only generates DSP logic to inject into pre-built templates
+2. Full generation: AI generates complete files (fallback for unsupported types)
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.template_manager import PluginTemplate
+
+
 # =============================================================================
-# Main System Prompt for Code Generation
+# Template-Based System Prompt (Logic Injection Mode)
+# =============================================================================
+
+TEMPLATE_SYSTEM_PROMPT = """You are the vAIst DSP Coder, an expert in audio DSP algorithms.
+
+TASK: Generate ONLY the DSP logic code for the marked section of a VST plugin.
+The plugin template and boilerplate are already provided - you just fill in the math.
+
+CRITICAL: Output ONLY the inner-loop DSP code. No includes, no class definitions, no function signatures.
+
+AVAILABLE VARIABLES:
+{available_params}
+
+CONSTRAINTS:
+{constraints}
+
+OUTPUT FORMAT:
+Output ONLY the C++ code that goes between the markers. Example:
+
+```cpp
+// Your DSP logic here
+channelData[sample] = processedValue;
+```
+
+DO NOT include:
+- #include statements
+- Class definitions
+- Function signatures
+- The marker comments themselves
+
+Just the raw DSP math that processes audio samples.
+"""
+
+
+# =============================================================================
+# Full Generation System Prompt (Fallback Mode)
 # =============================================================================
 
 SYSTEM_PROMPT = """You are the vAIst DSP Coder, an expert C++ Audio Developer specializing in the JUCE 8 framework.
@@ -194,3 +239,72 @@ def get_repair_prompt(error_message: str, original_code: str, filename: str) -> 
         original_code=original_code,
         filename=filename
     )
+
+
+def get_template_prompt(template: "PluginTemplate", user_prompt: str) -> str:
+    """
+    Generate a prompt for template-based logic injection.
+
+    Args:
+        template: The PluginTemplate with available params and constraints
+        user_prompt: User's plugin description
+
+    Returns:
+        Complete prompt asking AI to generate only the DSP logic
+    """
+    # Format available params as bullet list
+    params_str = "\n".join(f"- {p}" for p in template.available_params)
+
+    # Format constraints as bullet list
+    constraints_str = "\n".join(f"- {c}" for c in template.constraints)
+
+    # Build the system prompt
+    system = TEMPLATE_SYSTEM_PROMPT.format(
+        available_params=params_str,
+        constraints=constraints_str,
+    )
+
+    return f"{system}\n\nUSER REQUEST:\n{user_prompt}"
+
+
+def get_template_repair_prompt(
+    error_message: str,
+    original_logic: str,
+    template: "PluginTemplate",
+) -> str:
+    """
+    Create a repair prompt for template-based code.
+
+    Args:
+        error_message: Compiler error output
+        original_logic: The DSP logic that was injected
+        template: The template being used
+
+    Returns:
+        Prompt to fix the DSP logic
+    """
+    params_str = "\n".join(f"- {p}" for p in template.available_params)
+    constraints_str = "\n".join(f"- {c}" for c in template.constraints)
+
+    return f"""The DSP logic you provided caused a compilation error.
+
+COMPILER ERROR:
+{error_message}
+
+ORIGINAL LOGIC:
+```cpp
+{original_logic}
+```
+
+AVAILABLE VARIABLES:
+{params_str}
+
+CONSTRAINTS:
+{constraints_str}
+
+Fix the error and output ONLY the corrected DSP logic code.
+Output in a code block:
+```cpp
+// Fixed logic here
+```
+"""
