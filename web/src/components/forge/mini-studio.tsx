@@ -1,12 +1,28 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Play, Square, Volume2, Zap, Waves, Activity } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  Play,
+  Square,
+  Volume2,
+  Zap,
+  Waves,
+  Activity,
+  Upload,
+  Music,
+  FileAudio,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RotaryKnob } from "./rotary-knob";
 import { cn } from "@/lib/utils";
 import type { PluginControl } from "@/types/project";
+
+// Dynamically import reactronica to avoid SSR issues
+import dynamic from "next/dynamic";
+
+// Import Tone.js types
+import * as Tone from "tone";
 
 interface MiniStudioProps {
   pluginName: string;
@@ -16,6 +32,23 @@ interface MiniStudioProps {
   className?: string;
 }
 
+// Helper to find control value by name pattern
+function findControlValue(
+  controls: PluginControl[],
+  controlValues: Record<string, number>,
+  patterns: string[]
+): number {
+  for (const pattern of patterns) {
+    const control = controls.find((c) =>
+      c.name.toLowerCase().includes(pattern.toLowerCase())
+    );
+    if (control) {
+      return controlValues[control.id] ?? control.value;
+    }
+  }
+  return 0.5; // default
+}
+
 export function MiniStudio({
   pluginName,
   pluginId,
@@ -23,32 +56,245 @@ export function MiniStudio({
   onControlChange,
   className,
 }: MiniStudioProps) {
+  // Audio state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [audioFileName, setAudioFileName] = useState<string | null>(null);
+  const [isAudioReady, setIsAudioReady] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+
+  // Visualization state
   const [audioData, setAudioData] = useState<number[]>(new Array(64).fill(0));
   const [controlValues, setControlValues] = useState<Record<string, number>>(
     Object.fromEntries(controls.map((c) => [c.id, c.value]))
   );
-  const animationRef = useRef<number | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Simulate audio visualization
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+
+  // Tone.js refs
+  const playerRef = useRef<Tone.Player | null>(null);
+  const synthRef = useRef<Tone.Synth | null>(null);
+  const distortionRef = useRef<Tone.Distortion | null>(null);
+  const filterRef = useRef<Tone.Filter | null>(null);
+  const gainRef = useRef<Tone.Gain | null>(null);
+  const analyzerRef = useRef<Tone.Analyser | null>(null);
+  const sequenceRef = useRef<Tone.Sequence | null>(null);
+
+  // Initialize Tone.js on first user interaction
+  const initializeAudio = useCallback(async () => {
+    if (isAudioReady) return;
+
+    try {
+      await Tone.start();
+      console.log("Audio context started");
+
+      // Create effects chain
+      analyzerRef.current = new Tone.Analyser("waveform", 64);
+      distortionRef.current = new Tone.Distortion(0.4);
+      filterRef.current = new Tone.Filter(2000, "lowpass");
+      gainRef.current = new Tone.Gain(0.7);
+
+      // Connect effects chain: source -> distortion -> filter -> gain -> analyzer -> output
+      distortionRef.current.connect(filterRef.current);
+      filterRef.current.connect(gainRef.current);
+      gainRef.current.connect(analyzerRef.current);
+      analyzerRef.current.toDestination();
+
+      // Create fallback synth
+      synthRef.current = new Tone.Synth({
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.8 },
+      }).connect(distortionRef.current);
+
+      setIsAudioReady(true);
+      setAudioError(null);
+    } catch (error) {
+      console.error("Failed to initialize audio:", error);
+      setAudioError("Failed to initialize audio engine");
+    }
+  }, [isAudioReady]);
+
+  // Handle file upload
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Validate file type
+      const validTypes = ["audio/wav", "audio/mp3", "audio/mpeg", "audio/ogg"];
+      if (!validTypes.includes(file.type) && !file.name.match(/\.(wav|mp3|ogg)$/i)) {
+        setAudioError("Please upload a WAV, MP3, or OGG file");
+        return;
+      }
+
+      try {
+        // Initialize audio if not already done
+        await initializeAudio();
+
+        // Stop any current playback
+        if (isPlaying) {
+          stopPlayback();
+        }
+
+        // Dispose of old player
+        if (playerRef.current) {
+          playerRef.current.dispose();
+          playerRef.current = null;
+        }
+
+        // Read file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Create new player with the audio buffer
+        const audioUrl = URL.createObjectURL(file);
+        playerRef.current = new Tone.Player({
+          url: audioUrl,
+          loop: true,
+          onload: () => {
+            console.log(`Loaded audio file: ${file.name}`);
+            setAudioFileName(file.name);
+            setAudioError(null);
+
+            // Connect to effects chain
+            if (distortionRef.current) {
+              playerRef.current?.connect(distortionRef.current);
+            }
+          },
+          onerror: (error) => {
+            console.error("Error loading audio:", error);
+            setAudioError("Failed to decode audio file");
+          },
+        });
+
+        // Decode for duration info
+        const audioContext = Tone.getContext().rawContext;
+        const decodedBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+        setAudioBuffer(decodedBuffer);
+      } catch (error) {
+        console.error("Error loading audio file:", error);
+        setAudioError("Failed to load audio file");
+      }
+    },
+    [initializeAudio, isPlaying]
+  );
+
+  // Start playback
+  const startPlayback = useCallback(async () => {
+    await initializeAudio();
+
+    if (audioBuffer && playerRef.current) {
+      // Play loaded sample
+      playerRef.current.start();
+    } else if (synthRef.current) {
+      // Play fallback synth sequence
+      const notes = ["C3", "E3", "G3", "B3", "C4", "B3", "G3", "E3"];
+      sequenceRef.current = new Tone.Sequence(
+        (time, note) => {
+          synthRef.current?.triggerAttackRelease(note, "8n", time);
+        },
+        notes,
+        "4n"
+      ).start(0);
+      Tone.getTransport().start();
+    }
+
+    setIsPlaying(true);
+  }, [audioBuffer, initializeAudio]);
+
+  // Stop playback
+  const stopPlayback = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.stop();
+    }
+    if (sequenceRef.current) {
+      sequenceRef.current.stop();
+      sequenceRef.current.dispose();
+      sequenceRef.current = null;
+    }
+    Tone.getTransport().stop();
+    setIsPlaying(false);
+  }, []);
+
+  // Toggle playback
+  const togglePlayback = useCallback(async () => {
+    if (isPlaying) {
+      stopPlayback();
+    } else {
+      await startPlayback();
+    }
+  }, [isPlaying, startPlayback, stopPlayback]);
+
+  // Update effects based on control values
   useEffect(() => {
-    if (!isPlaying) {
-      setAudioData(new Array(64).fill(0));
+    if (!isAudioReady) return;
+
+    // Map common control names to effect parameters
+    const driveValue = findControlValue(controls, controlValues, [
+      "drive",
+      "gain",
+      "amount",
+      "intensity",
+      "saturation",
+    ]);
+    const toneValue = findControlValue(controls, controlValues, [
+      "tone",
+      "color",
+      "filter",
+      "cutoff",
+      "brightness",
+    ]);
+    const mixValue = findControlValue(controls, controlValues, [
+      "mix",
+      "wet",
+      "blend",
+      "dry/wet",
+    ]);
+    const outputValue = findControlValue(controls, controlValues, [
+      "output",
+      "volume",
+      "level",
+      "master",
+    ]);
+
+    // Update distortion
+    if (distortionRef.current) {
+      distortionRef.current.distortion = driveValue;
+      distortionRef.current.wet.value = mixValue;
+    }
+
+    // Update filter (map 0-1 to 200Hz-8000Hz)
+    if (filterRef.current) {
+      const frequency = 200 + toneValue * 7800;
+      filterRef.current.frequency.value = frequency;
+    }
+
+    // Update output gain
+    if (gainRef.current) {
+      gainRef.current.gain.value = outputValue * 0.8;
+    }
+  }, [controlValues, controls, isAudioReady]);
+
+  // Real-time waveform visualization
+  useEffect(() => {
+    if (!isPlaying || !analyzerRef.current) {
+      if (!isPlaying) {
+        setAudioData(new Array(64).fill(0));
+      }
       return;
     }
 
     const animate = () => {
-      setAudioData((prev) =>
-        prev.map((_, i) => {
-          // Create a more musical-looking waveform
-          const baseFreq = Math.sin(Date.now() * 0.002 + i * 0.3) * 0.3;
-          const harmonic = Math.sin(Date.now() * 0.005 + i * 0.5) * 0.2;
-          const noise = Math.random() * 0.1;
-          const envelope = Math.sin(i / 64 * Math.PI) * 0.8;
-          return Math.abs((baseFreq + harmonic + noise) * envelope);
-        })
-      );
+      if (analyzerRef.current) {
+        const waveform = analyzerRef.current.getValue() as Float32Array;
+        // Normalize and convert to positive values for visualization
+        const normalizedData = Array.from(waveform).map((v) =>
+          Math.abs(v as number)
+        );
+        setAudioData(normalizedData);
+      }
       animationRef.current = requestAnimationFrame(animate);
     };
 
@@ -85,11 +331,10 @@ export function MiniStudio({
     ctx.fillStyle = gradient;
 
     audioData.forEach((value, i) => {
-      const barHeight = value * height * 0.9;
+      const barHeight = Math.min(value * height * 2, height * 0.9);
       const x = i * barWidth;
       const y = height - barHeight;
 
-      // Bar with rounded top
       ctx.beginPath();
       ctx.roundRect(x + 1, y, barWidth - 2, barHeight, 2);
       ctx.fill();
@@ -102,6 +347,7 @@ export function MiniStudio({
     }
   }, [audioData, isPlaying]);
 
+  // Handle control changes
   const handleControlChange = useCallback(
     (controlId: string, value: number) => {
       setControlValues((prev) => ({ ...prev, [controlId]: value }));
@@ -109,6 +355,19 @@ export function MiniStudio({
     },
     [onControlChange]
   );
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      playerRef.current?.dispose();
+      synthRef.current?.dispose();
+      distortionRef.current?.dispose();
+      filterRef.current?.dispose();
+      gainRef.current?.dispose();
+      analyzerRef.current?.dispose();
+      sequenceRef.current?.dispose();
+    };
+  }, []);
 
   return (
     <motion.div
@@ -149,6 +408,49 @@ export function MiniStudio({
         </div>
       </div>
 
+      {/* Audio Source Controls */}
+      <div className="px-4 pt-4">
+        <div className="flex items-center gap-3 p-3 bg-black/40 rounded-lg border border-zinc-800">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="audio/wav,audio/mp3,audio/mpeg,audio/ogg,.wav,.mp3,.ogg"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            variant="outline"
+            size="sm"
+            className="border-zinc-700 hover:bg-zinc-800"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Load Sample
+          </Button>
+          <div className="flex-1 flex items-center gap-2 text-xs text-zinc-500 truncate">
+            {audioFileName ? (
+              <>
+                <FileAudio className="w-4 h-4 text-forge-primary flex-shrink-0" />
+                <span className="truncate">{audioFileName}</span>
+                {audioBuffer && (
+                  <span className="text-zinc-600">
+                    ({audioBuffer.duration.toFixed(1)}s)
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Music className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+                <span>No sample loaded (using synth)</span>
+              </>
+            )}
+          </div>
+        </div>
+        {audioError && (
+          <p className="mt-2 text-xs text-red-500 text-center">{audioError}</p>
+        )}
+      </div>
+
       {/* Visualizer */}
       <div className="p-4">
         <div className="relative bg-black/50 rounded-lg border border-zinc-800 overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]">
@@ -165,10 +467,14 @@ export function MiniStudio({
           {/* Overlay Labels */}
           <div className="absolute top-2 left-3 flex items-center gap-2">
             <Waves className="w-3 h-3 text-forge-primary/50" />
-            <span className="text-[9px] text-zinc-600 font-mono">SPECTRUM</span>
+            <span className="text-[9px] text-zinc-600 font-mono">
+              {isPlaying ? "LIVE WAVEFORM" : "SPECTRUM"}
+            </span>
           </div>
           <div className="absolute top-2 right-3">
-            <span className="text-[9px] text-zinc-600 font-mono">48kHz / 24bit</span>
+            <span className="text-[9px] text-zinc-600 font-mono">
+              {audioBuffer ? `${audioBuffer.sampleRate}Hz` : "48kHz"} / 24bit
+            </span>
           </div>
 
           {/* Grid Lines */}
@@ -221,7 +527,7 @@ export function MiniStudio({
                   ? "bg-red-600 hover:bg-red-500"
                   : "bg-forge-primary hover:bg-forge-glow forge-glow"
               )}
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={togglePlayback}
             >
               {isPlaying ? (
                 <Square className="w-5 h-5" />
@@ -247,7 +553,7 @@ export function MiniStudio({
       {/* Footer */}
       <div className="px-4 py-2 border-t border-zinc-800/50 bg-black/20">
         <p className="text-[9px] text-zinc-600 text-center font-mono">
-          vAIst Forge Engine // Simulated Audio Preview
+          vAIst Forge Engine // {audioFileName ? "Sample Playback" : "Synth Demo"} Mode
         </p>
       </div>
     </motion.div>
