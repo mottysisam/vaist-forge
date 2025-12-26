@@ -41,13 +41,51 @@ Template uses placeholder markers: `/* AI_PARAMETER_START */`, `/* AI_DSP_LOGIC_
 |-------|-----------|
 | Frontend | Next.js, React, Vercel |
 | Backend API | FastAPI (Python) |
-| AI Model | GPT-4o or Claude 3.5 Sonnet |
+| AI Architect | Claude Opus 4.5 (master template, architecture reasoning) |
+| AI Coder | Gemini 3 Flash (high-throughput DSP code generation) |
 | Plugin Framework | JUCE 8 (C++) |
 | Build System | CMake 3.24+ with FetchContent |
 | CI/CD | GitHub Actions (Windows + macOS matrix) |
 | Compilers | MSVC 2022 (Windows), Xcode 15+ (macOS) |
 | Storage | AWS S3 |
 | Database | PostgreSQL (Supabase) |
+
+## AI Strategy: Hybrid Model Architecture
+
+vAIst uses a **dual-model approach** optimized for speed and quality:
+
+### Architect Model: Claude Opus 4.5
+- **Role:** Design master templates, core C++ architecture, complex DSP algorithms
+- **Strengths:** 80.9% SWE-bench (fewer bugs), superior architectural reasoning
+- **Use When:** Initial template design, complex filter implementations, debugging
+
+### Coder Model: Gemini 3 Flash
+- **Role:** Repetitive one-click generation of plugin variations
+- **Strengths:** 78% SWE-bench, 220+ tokens/sec, 1M token context window
+- **Cost:** $0.50/1M input, $3/1M output (~80% cheaper than Claude)
+- **Use When:** User prompt → DSP code generation, batch processing
+
+### Implementation Pattern
+```python
+# vAIst Backend (Phase 2)
+import google.generativeai as genai
+
+# Load entire JUCE 8 SDK docs into context (fits in 1M window)
+model = genai.GenerativeModel('gemini-3-flash-preview')
+system_instruction = "You are the vAIst DSP Coder. Reference the attached JUCE 8 spec."
+
+# Fast generation with thinking mode for complex filters
+response = model.generate_content(user_audio_request)
+```
+
+### Cost/Performance Summary
+| Metric | Gemini 3 Flash | Claude Opus 4.5 |
+|--------|----------------|-----------------|
+| SWE-bench | 78.0% | 80.9% |
+| Speed | 220+ tok/sec | ~50 tok/sec |
+| Context | 1,000,000 tokens | 200,000 tokens |
+| Cost | $0.50/$3 per 1M | Premium |
+| Best For | Volume generation | Architecture/debug |
 
 ## Development Phases
 
@@ -61,7 +99,9 @@ The first technical action should be setting up the GitHub Actions Matrix. Once 
 5. Verify artifact upload works
 
 ### Phase 2: AI Orchestration
-- FastAPI backend with OpenAI/Anthropic integration
+- FastAPI backend with hybrid AI integration (Gemini 3 Flash + Claude Opus 4.5)
+- Gemini 3 Flash as primary coder (1M context window loads full JUCE 8 SDK)
+- Claude Opus 4.5 fallback for complex debugging/architecture
 - System prompt engineering for JUCE-compliant C++ output
 - Regex parsing to extract code from markdown responses
 - PyGithub automation for branching/committing/pushing
@@ -117,11 +157,12 @@ Critical flags:
 ## Python Backend Dependencies
 
 ```bash
-pip install openai PyGithub fastapi python-dotenv
+pip install google-generativeai anthropic PyGithub fastapi python-dotenv uvicorn
 ```
 
 Required environment variables:
-- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+- `GOOGLE_API_KEY` (Gemini 3 Flash - primary coder)
+- `ANTHROPIC_API_KEY` (Claude Opus 4.5 - architect/fallback)
 - `GITHUB_TOKEN`
 - `DATABASE_URL` (Supabase PostgreSQL)
 - `AWS_S3_BUCKET`, `AWS_CREDENTIALS`

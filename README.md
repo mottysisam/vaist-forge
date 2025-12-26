@@ -40,7 +40,8 @@ graph LR
 | Component | Technology |
 |-----------|-----------|
 | Plugin Framework | JUCE 8 (C++) |
-| AI Engine | GPT-4o / Claude 3.5 Sonnet |
+| AI Coder | Gemini 3 Flash (1M context, 220+ tok/sec) |
+| AI Architect | Claude Opus 4.5 (templates, debugging) |
 | Build System | CMake 3.24+ with FetchContent |
 | CI/CD | GitHub Actions (Windows + macOS matrix) |
 | Backend | FastAPI (Python) |
