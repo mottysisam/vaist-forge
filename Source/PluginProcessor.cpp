@@ -6,9 +6,9 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(drive = new juce::AudioParameterFloat(
-        "drive",    // Parameter ID (lowercase, no spaces)
-        "Drive",  // Display name
+    addParameter(volume = new juce::AudioParameterFloat(
+        "volume",    // Parameter ID (lowercase, no spaces)
+        "Volume",  // Display name
         0.0f,          // Minimum
         1.0f,          // Maximum
         0.5f           // Default
@@ -29,7 +29,7 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    // Initialize DSP here
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -46,23 +46,15 @@ bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
 void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
+    for (int channel = 0; channel < numChannels; ++channel) {
+        float* channelData = buffer.getWritePointer(channel);
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            float in = channelData[sample];
-            float driveValue = drive->get();
-            float shaped = juce::jmap(in, -1.0f, 1.0f, -driveValue, driveValue);
-            shaped = std::tanh(shaped);
-            channelData[sample] = shaped;
+        for (int sample = 0; sample < numSamples; ++sample) {
+            channelData[sample] *= *volume;
         }
     }
 }
@@ -71,13 +63,15 @@ bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    // Save state
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(drive->get());
+    stream.writeFloat(*volume);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    drive->setValueNotifyingHost(stream.readFloat());
+    // Load state
+    juce::MemoryInputStream stream(data, static_cast<size_t> (sizeInBytes), false);
+    *volume = stream.readFloat();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
