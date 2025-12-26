@@ -25,6 +25,11 @@ export interface ProjectManifest {
   dspType?: string;    // "cubic-softclip", "waveshaper", etc.
 }
 
+export interface DownloadUrls {
+  windows?: string;
+  macos?: string;
+}
+
 export interface ProjectCapsule {
   id: string;          // The VAI1, VAI2 unique ID
   taskId: string;      // Backend task ID
@@ -33,7 +38,8 @@ export interface ProjectCapsule {
   timestamp: Date;     // Build date
   status: "SUCCESS" | "FAILED" | "BUILDING";
   manifest: ProjectManifest;
-  downloadUrl?: string; // The download link
+  downloadUrls?: DownloadUrls; // Platform-specific download links
+  workflowUrl?: string;        // GitHub Actions workflow URL
   version: number;     // v1, v2, v3 for refinements
 }
 

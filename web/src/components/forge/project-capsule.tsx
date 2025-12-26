@@ -194,19 +194,51 @@ export function ProjectCapsule({
               >
                 <Play className="w-3 h-3" />
               </Button>
-              <Button
-                size="sm"
-                className="flex-1 bg-orange-600 hover:bg-orange-500 text-xs"
-                asChild
-              >
-                <a
-                  href={project.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {project.downloadUrls?.windows && (
+                <Button
+                  size="sm"
+                  className="flex-1 bg-orange-600 hover:bg-orange-500 text-xs"
+                  asChild
                 >
-                  <Download className="w-3 h-3 mr-2" /> VST3
-                </a>
-              </Button>
+                  <a
+                    href={project.downloadUrls.windows}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download className="w-3 h-3 mr-1" /> Win
+                  </a>
+                </Button>
+              )}
+              {project.downloadUrls?.macos && (
+                <Button
+                  size="sm"
+                  className="flex-1 bg-orange-600 hover:bg-orange-500 text-xs"
+                  asChild
+                >
+                  <a
+                    href={project.downloadUrls.macos}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download className="w-3 h-3 mr-1" /> Mac
+                  </a>
+                </Button>
+              )}
+              {!project.downloadUrls?.windows && !project.downloadUrls?.macos && project.workflowUrl && (
+                <Button
+                  size="sm"
+                  className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-xs"
+                  asChild
+                >
+                  <a
+                    href={project.workflowUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download className="w-3 h-3 mr-1" /> Get VST3
+                  </a>
+                </Button>
+              )}
             </>
           )}
 

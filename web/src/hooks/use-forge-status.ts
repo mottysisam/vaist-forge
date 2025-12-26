@@ -7,7 +7,7 @@ interface UseForgeStatusOptions {
   /** Polling interval in milliseconds (default: 2000) */
   interval?: number;
   /** Callback when build succeeds */
-  onSuccess?: (downloadUrl?: string) => void;
+  onSuccess?: (status: ForgeStatus) => void;
   /** Callback when build fails */
   onError?: (error: string) => void;
 }
@@ -57,7 +57,7 @@ export function useForgeStatus(options: UseForgeStatusOptions = {}): UseForgeSta
       // Check for terminal states
       if (result.status === "SUCCESS") {
         stopPolling();
-        onSuccessRef.current?.(result.downloadUrl);
+        onSuccessRef.current?.(result);
       } else if (result.status === "FAILED") {
         stopPolling();
         onErrorRef.current?.(result.error || "Build failed");

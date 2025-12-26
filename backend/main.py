@@ -17,6 +17,7 @@ from backend.models import (
     GenerateResponse,
     StatusResponse,
     TaskStatus,
+    DownloadUrls,
 )
 from backend.task_manager import task_manager
 from backend.ai_synthesizer import AISynthesizer
@@ -198,10 +199,13 @@ async def generate_plugin_task(task_id: str, prompt: str):
 
             if status == "success":
                 logger.info(f"[{task_id}] Build successful!")
+                # Fetch artifact download URLs
+                artifact_urls = github_manager.get_artifact_urls(run_id)
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.SUCCESS,
                     workflow_run_id=run_id,
+                    download_urls=artifact_urls if artifact_urls else None,
                 )
                 return
 
@@ -366,10 +370,13 @@ async def attempt_repair(
 
         if status == "success":
             logger.info(f"[{task_id}] Repair build successful!")
+            # Fetch artifact download URLs
+            artifact_urls = github_manager.get_artifact_urls(run_id)
             task_manager.update_task(
                 task_id,
                 status=TaskStatus.SUCCESS,
                 workflow_run_id=run_id,
+                download_urls=artifact_urls if artifact_urls else None,
             )
             return
 
@@ -454,6 +461,14 @@ async def get_status(task_id: str):
             f"https://github.com/{settings.GITHUB_REPO}/actions/runs/{task.workflow_run_id}"
         )
 
+    # Build download URLs if available
+    download_urls = None
+    if task.download_urls:
+        download_urls = DownloadUrls(
+            windows=task.download_urls.get("windows"),
+            macos=task.download_urls.get("macos"),
+        )
+
     return StatusResponse(
         task_id=task.task_id,
         status=task.status,
@@ -464,6 +479,8 @@ async def get_status(task_id: str):
         workflow_url=workflow_url,
         error_message=task.error_message,
         retry_count=task.retry_count,
+        download_urls=download_urls,
+        plugin_id=task.plugin_id,
     )
 
 

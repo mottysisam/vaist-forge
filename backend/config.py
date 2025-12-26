@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Build Monitoring
     BUILD_POLL_INTERVAL_SECONDS: int = 5
-    BUILD_TIMEOUT_SECONDS: int = 300  # 5 minutes
+    BUILD_TIMEOUT_SECONDS: int = 600  # 10 minutes (builds take ~6 min)
 
     class Config:
         env_file = ".env"

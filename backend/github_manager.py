@@ -264,3 +264,39 @@ class GitHubManager:
             URL string
         """
         return f"https://github.com/{self.settings.GITHUB_REPO}/actions/runs/{run_id}"
+
+    def get_artifact_urls(self, run_id: int) -> dict[str, str]:
+        """
+        Get download URLs for workflow artifacts.
+
+        Note: GitHub artifact download requires authentication, so we return
+        the API URL that can be used with the GitHub token.
+
+        Args:
+            run_id: GitHub Actions workflow run ID
+
+        Returns:
+            Dict with platform keys ("windows", "macos") and download URLs
+        """
+        try:
+            run = self.repo.get_workflow_run(run_id)
+            artifacts = run.get_artifacts()
+
+            urls = {}
+            for artifact in artifacts:
+                name_lower = artifact.name.lower()
+                if "windows" in name_lower:
+                    # Return the GitHub Actions artifact page URL
+                    urls["windows"] = f"https://github.com/{self.settings.GITHUB_REPO}/actions/runs/{run_id}/artifacts/{artifact.id}"
+                elif "macos" in name_lower or "mac" in name_lower:
+                    urls["macos"] = f"https://github.com/{self.settings.GITHUB_REPO}/actions/runs/{run_id}/artifacts/{artifact.id}"
+
+            logger.info(f"Found artifact URLs for run {run_id}: {list(urls.keys())}")
+            return urls
+
+        except GithubException as e:
+            logger.error(f"Failed to get artifact URLs: {e}")
+            return {}
+        except Exception as e:
+            logger.exception("Unexpected error getting artifact URLs")
+            return {}

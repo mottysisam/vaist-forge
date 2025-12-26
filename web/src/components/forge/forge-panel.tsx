@@ -10,7 +10,7 @@ import { BuildProgress } from "./build-progress";
 import { MiniStudio } from "./mini-studio";
 import { ProjectCapsule } from "./project-capsule";
 import { useForgeStatus } from "@/hooks/use-forge-status";
-import { startForgeAction } from "@/app/actions/forge";
+import { startForgeAction, type ForgeStatus } from "@/app/actions/forge";
 import { cn } from "@/lib/utils";
 import {
   type ProjectCapsule as ProjectCapsuleType,
@@ -37,11 +37,11 @@ export function ForgePanel() {
   const [activeProject, setActiveProject] = useState<ProjectCapsuleType | null>(null);
 
   const { status, startPolling, reset } = useForgeStatus({
-    onSuccess: (downloadUrl) => {
+    onSuccess: (forgeStatus: ForgeStatus) => {
       if (currentTaskId) {
         const controls = inferControlsFromPrompt(currentPrompt);
         const newProject: ProjectCapsuleType = {
-          id: generatePluginId(),
+          id: forgeStatus.pluginId || generatePluginId(),
           taskId: currentTaskId,
           prompt: currentPrompt,
           type: inferPluginType(currentPrompt),
@@ -52,7 +52,8 @@ export function ForgePanel() {
             complexity: Math.floor(Math.random() * 200) + 100, // Simulated
             dspType: inferPluginType(currentPrompt).toLowerCase(),
           },
-          downloadUrl,
+          downloadUrls: forgeStatus.downloadUrls,
+          workflowUrl: forgeStatus.workflowUrl,
           version: 1,
         };
         setProjects((prev) => [newProject, ...prev]);

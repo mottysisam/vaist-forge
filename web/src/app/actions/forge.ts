@@ -8,11 +8,18 @@ export interface ForgeResult {
   error?: string;
 }
 
+export interface DownloadUrls {
+  windows?: string;
+  macos?: string;
+}
+
 export interface ForgeStatus {
   status: "PENDING" | "SYNTHESIZING" | "PUSHING" | "BUILDING" | "SUCCESS" | "FAILED";
   progress: number;
   message?: string;
-  downloadUrl?: string;
+  downloadUrls?: DownloadUrls;
+  pluginId?: string;
+  workflowUrl?: string;
   error?: string;
 }
 
@@ -46,7 +53,7 @@ export async function startForgeAction(prompt: string): Promise<ForgeResult> {
 
 /**
  * Polls the build status for a given task.
- * Returns current status, progress percentage, and download URL when complete.
+ * Returns current status, progress percentage, and download URLs when complete.
  */
 export async function getForgeStatus(taskId: string): Promise<ForgeStatus> {
   try {
@@ -61,22 +68,39 @@ export async function getForgeStatus(taskId: string): Promise<ForgeStatus> {
 
     const data = await response.json();
 
+    // Backend returns lowercase status, convert to uppercase for frontend
+    const backendStatus = (data.status || "pending").toUpperCase();
+
     // Map backend status to progress percentage
     const progressMap: Record<string, number> = {
-      PENDING: 0,
+      PENDING: 5,
       SYNTHESIZING: 25,
       PUSHING: 50,
       BUILDING: 75,
+      VALIDATING: 90,
       SUCCESS: 100,
       FAILED: 100,
     };
 
+    // Build status message based on current phase
+    const messageMap: Record<string, string> = {
+      PENDING: "Initializing the Forge...",
+      SYNTHESIZING: "AI is crafting your DSP code...",
+      PUSHING: "Pushing to GitHub...",
+      BUILDING: "Compiling for Windows & macOS...",
+      VALIDATING: "Running plugin validation...",
+      SUCCESS: "Your plugin is ready!",
+      FAILED: data.error_message || "Build failed",
+    };
+
     return {
-      status: data.status,
-      progress: progressMap[data.status] || 0,
-      message: data.message,
-      downloadUrl: data.download_url,
-      error: data.error,
+      status: backendStatus as ForgeStatus["status"],
+      progress: progressMap[backendStatus] || 0,
+      message: messageMap[backendStatus],
+      downloadUrls: data.download_urls,
+      pluginId: data.plugin_id,
+      workflowUrl: data.workflow_url,
+      error: data.error_message,
     };
   } catch (error) {
     console.error("Status Error:", error);
