@@ -1,13 +1,16 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(gainParameter = new juce::AudioParameterFloat(
-        juce::ParameterID{"gain", 1}, "Gain", 0.0f, 2.0f, 1.0f));
+    addParameter(driveParam = new juce::AudioParameterFloat(
+        juce::ParameterID{"drive", 1}, "Drive", 1.0f, 20.0f, 1.0f));
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        juce::ParameterID{"mix", 1}, "Mix", 0.0f, 1.0f, 1.0f));
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -49,8 +52,9 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // Get parameter value
-    float gain = gainParameter->get();
+    // Get parameter values
+    float drive = driveParam->get();
+    float mix = mixParam->get();
 
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -59,9 +63,15 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
+            float dry = channelData[sample];
+            float wet = dry;
+
             // === AI_LOGIC_START ===
-        channelData[sample] *= gain;
+        channelData[sample] = std::tanh(channelData[sample] * drive) * mix;
         // === AI_LOGIC_END ===
+
+            // Mix dry/wet
+            channelData[sample] = dry * (1.0f - mix) + wet * mix;
         }
     }
 }
@@ -72,13 +82,15 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(gainParameter->get());
+    stream.writeFloat(driveParam->get());
+    stream.writeFloat(mixParam->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *gainParameter = stream.readFloat();
+    *driveParam = stream.readFloat();
+    *mixParam = stream.readFloat();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
