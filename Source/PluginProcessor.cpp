@@ -64,34 +64,35 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float driveAmount = driveAmountParam->get();
-        const float outputLevel = outputLevelParam->get();
+    const float driveAmount = driveAmountParam->get();
+    const float outputLevel = outputLevelParam->get();
 
     // DSP Processing
-        // Process each channel
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    // Process each channel
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = buffer.getWritePointer(channel);
+            const float dry = channelData[sample];
 
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                const float dry = channelData[sample];
+            // Apply pre-gain based on drive
+            const float preGain = 1.0f + driveAmount * 11.0f;
+            const float driven = dry * preGain;
 
-                // Apply pre-gain based on drive
-                const float preGain = 1.0f + driveAmount * 11.0f;
-                const float driven = dry * preGain;
+            // Apply waveshaping function
+            // Tanh soft saturation
+            const float shaped = std::tanh(driven);
 
-                // Apply waveshaping function
-                // Tanh soft saturation
-                const float shaped = std::tanh(driven);
+            // Output compensation
+            const float compensated = shaped * 0.7f;
 
-                // Output compensation
-                const float compensated = shaped * 0.7f;
-
-                // Mix dry/wet
-                channelData[sample] = dry * (1.0f - mix) + compensated * mix;
-            }
+            // Mix dry/wet.  Assuming 'mix' is a member variable.  If it's not, initialize it.
+            float mix = 0.5f;  //Initialize with a default value.  Consider making this a parameter.
+            channelData[sample] = dry * (1.0f - mix) + compensated * mix;
         }
+    }
 
     // Output sanitization: prevent NaN/Inf from reaching the host
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
