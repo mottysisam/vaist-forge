@@ -6,12 +6,14 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(delayTimeParam = new juce::AudioParameterFloat(
-        juce::ParameterID{"delayTime", 1}, "Delay Time", 0.01f, 1.0f, 0.3f));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        juce::ParameterID{"feedback", 1}, "Feedback", 0.0f, 0.95f, 0.5f));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        juce::ParameterID{"mix", 1}, "Mix", 0.0f, 1.0f, 0.5f));
+    // Initialize parameters
+    addParameter(gainParam = new juce::AudioParameterFloat(
+        "gain",
+        "Gain",
+        0.0f,
+        1.0f,
+        0.5f
+    ));
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -20,102 +22,79 @@ const juce::String VAIstAudioProcessor::getName() const { return JucePlugin_Name
 bool VAIstAudioProcessor::acceptsMidi() const { return false; }
 bool VAIstAudioProcessor::producesMidi() const { return false; }
 bool VAIstAudioProcessor::isMidiEffect() const { return false; }
-double VAIstAudioProcessor::getTailLengthSeconds() const { return 1.0; }
+double VAIstAudioProcessor::getTailLengthSeconds() const { return 0.0; }
 int VAIstAudioProcessor::getNumPrograms() { return 1; }
 int VAIstAudioProcessor::getCurrentProgram() { return 0; }
-void VAIstAudioProcessor::setCurrentProgram(int) {}
-const juce::String VAIstAudioProcessor::getProgramName(int) { return {}; }
-void VAIstAudioProcessor::changeProgramName(int, const juce::String&) {}
+void VAIstAudioProcessor::setCurrentProgram(int index) { juce::ignoreUnused(index); }
+const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignoreUnused(index); return {}; }
+void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    currentSampleRate = sampleRate;
-    juce::ignoreUnused(samplesPerBlock);
-
-    // Allocate delay buffer (max 2 seconds)
-    int maxDelaySamples = static_cast<int>(sampleRate * 2.0);
-    delayBuffer.setSize(2, maxDelaySamples);
-    delayBuffer.clear();
-    writePosition = 0;
+    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    // Initialize gain smoothing
+    gainSmoothed = 1.0f;
 }
 
-void VAIstAudioProcessor::releaseResources()
-{
-    delayBuffer.setSize(0, 0);
-}
+void VAIstAudioProcessor::releaseResources() {}
 
 bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
     return true;
 }
 
-void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear(i, 0, buffer.getNumSamples());
+    const int numSamples = buffer.getNumSamples();
 
-    // Get parameter values
-    float delayTime = delayTimeParam->get();
-    float feedback = feedbackParam->get();
-    float mix = mixParam->get();
+    // Read parameter values
+        const float gain = gainParam->get();
 
-    int delaySamples = static_cast<int>(delayTime * currentSampleRate);
-    int bufferSize = delayBuffer.getNumSamples();
+    // DSP Processing
+        // Convert dB to linear
+        const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
+        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-        auto* delayData = delayBuffer.getWritePointer(channel);
-        int numSamples = buffer.getNumSamples();
+        // Smooth gain changes
+        const float targetGain = gainLinear;
+        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
+        const float smoothGain = gainSmoothed;
 
-        for (int sample = 0; sample < numSamples; ++sample)
+        // Apply gain to all channels
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
-            float dry = channelData[sample];
-            float wet;
+            auto* channelData = buffer.getWritePointer(channel);
 
-            // Calculate read position
-            int readPos = writePosition - delaySamples;
-            if (readPos < 0) readPos += bufferSize;
-
-            // === AI_LOGIC_START ===
-        delayData[writePosition] = dry + (delayData[readPos] * feedback);
-        // === AI_LOGIC_END ===
-
-            // Mix dry/wet
-            channelData[sample] = dry * (1.0f - mix) + wet * mix;
-
-            // Advance write position
-            writePosition = (writePosition + 1) % bufferSize;
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                channelData[sample] *= smoothGain;
+            }
         }
-    }
 }
 
 bool VAIstAudioProcessor::hasEditor() const { return true; }
-juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
+
+juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor()
+{
+    return new VAIstAudioProcessorEditor(*this);
+}
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(delayTimeParam->get());
-    stream.writeFloat(feedbackParam->get());
-    stream.writeFloat(mixParam->get());
+    juce::ignoreUnused(destData);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *delayTimeParam = stream.readFloat();
-    *feedbackParam = stream.readFloat();
-    *mixParam = stream.readFloat();
+    juce::ignoreUnused(data, sizeInBytes);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
