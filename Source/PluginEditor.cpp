@@ -6,13 +6,27 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(volume = new juce::AudioParameterFloat(
-        "volume",    // Parameter ID (lowercase, no spaces)
-        "Volume",  // Display name
-        0.0f,          // Minimum
-        1.0f,          // Maximum
-        0.5f           // Default
+    addParameter(sustainKnob = new juce::AudioParameterFloat(
+        "sustain",
+        "Sustain",
+        0.0f,
+        1.0f,
+        0.5f
     ));
+
+    addParameter(sensitivityKnob = new juce::AudioParameterFloat(
+        "sensitivity",
+        "Sensitivity",
+        0.0f,
+        1.0f,
+        0.5f
+    ));
+
+    compressor.setThreshold(-12.0f);
+    compressor.setAttack(5.0f);
+    compressor.setRelease(50.0f);
+
+    gain.setGainDecibels(0.0f);
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -29,49 +43,61 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    // Initialize DSP here
+    compressor.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (uint32)getTotalNumOutputChannels() });
+    gain.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (uint32)getTotalNumOutputChannels() });
+
+    lastSampleRate = sampleRate;
 }
 
 void VAIstAudioProcessor::releaseResources() {}
 
 bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
+
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
+
     return true;
 }
 
 void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
-    
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
 
-    for (int channel = 0; channel < numChannels; ++channel) {
-        float* channelData = buffer.getWritePointer(channel);
+    float currentSustain = *sustainKnob;
+    float currentSensitivity = *sensitivityKnob;
 
-        for (int sample = 0; sample < numSamples; ++sample) {
-            channelData[sample] *= *volume;
-        }
-    }
+    compressor.setRatio(1.0f + (currentSustain * 9.0f)); // Ratio from 1:1 to 10:1
+    gain.setGainDecibels(currentSustain * 24.0f); // Makeup gain up to 24dB
+
+    // Convert sensitivity (0-1) to a time in milliseconds (e.g., 1ms to 100ms)
+    float attackReleaseTimeMs = juce::jmap(currentSensitivity, 0.0f, 1.0f, 1.0f, 100.0f);
+    compressor.setAttack(attackReleaseTimeMs); // Attack time
+    compressor.setRelease(attackReleaseTimeMs * 2.0f); // Release time (twice the attack)
+
+
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> context(block);
+
+    compressor.process(context);
+    gain.process(context);
 }
 
 bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    // Save state
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*volume);
+    stream.writeFloat(*sustainKnob);
+    stream.writeFloat(*sensitivityKnob);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    // Load state
-    juce::MemoryInputStream stream(data, static_cast<size_t> (sizeInBytes), false);
-    *volume = stream.readFloat();
+    juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
+    sustainKnob->setValueNotifyingHost(stream.readFloat());
+    sensitivityKnob->setValueNotifyingHost(stream.readFloat());
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
@@ -84,37 +110,53 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
 VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
-    juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
+    // Sustain Knob
+    sustainSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    sustainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
+    sustainSlider.setRange(0.0, 1.0, 0.01);
+    sustainSlider.setValue(0.5);
+    addAndMakeVisible(sustainSlider);
+    sustainAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.sustainKnob, sustainSlider, nullptr);
 
-    volumeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 20);
-    volumeSlider.setPopupDisplayEnabled(true);
-    volumeSlider.setTextValueSuffix(" Volume");
-    addAndMakeVisible(&volumeSlider);
+    sustainLabel.setText("Sustain", juce::dontSendNotification);
+    sustainLabel.attachToComponent(&sustainSlider, true);
+    addAndMakeVisible(sustainLabel);
 
-    volumeAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.volume,
-        volumeSlider,
-        nullptr
-    );
 
-    setSize(200, 300);
+    // Sensitivity Knob
+    sensitivitySlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    sensitivitySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
+    sensitivitySlider.setRange(0.0, 1.0, 0.01);
+    sensitivitySlider.setValue(0.5);
+    addAndMakeVisible(sensitivitySlider);
+    sensitivityAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.sensitivityKnob, sensitivitySlider, nullptr);
+
+    sensitivityLabel.setText("Sensitivity", juce::dontSendNotification);
+    sensitivityLabel.attachToComponent(&sensitivitySlider, true);
+    addAndMakeVisible(sensitivityLabel);
+
+    setSize(400, 300);
 }
 
-VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor()
-{
-    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
-}
+VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
 
 void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::black);
+    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
     g.setColour(juce::Colours::white);
-    g.setFont(15.0f);
-    g.drawFittedText ("VAIst Gain", getLocalBounds(), juce::Justification::centredTop, 1);
+    g.setFont(20.0f);
+    g.drawFittedText("VAIst Sustainer", getLocalBounds().removeFromTop(30), juce::Justification::centred, 1);
 }
 
 void VAIstAudioProcessorEditor::resized()
 {
-    volumeSlider.setBounds(40, 100, 120, 150);
+    juce::Rectangle<int> bounds = getLocalBounds().reduced(20);
+
+    int knobSize = 100;
+    int knobStartY = bounds.getCentreY() - (knobSize / 2);
+
+    sustainSlider.setBounds(bounds.removeFromLeft(knobSize).withY(knobStartY).withHeight(knobSize));
+    sensitivitySlider.setBounds(bounds.removeFromLeft(knobSize).withY(knobStartY).withHeight(knobSize));
 }
