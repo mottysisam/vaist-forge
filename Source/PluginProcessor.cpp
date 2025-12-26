@@ -52,7 +52,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
-    float gainValue = juce::Decibels::decibelsToGain(*gainParameter);
+    float gainValue = juce::Decibels::decibelsToGain(gainParameter->get());
 
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
         auto* channelData = buffer.getWritePointer(channel);
@@ -68,12 +68,12 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*gainParameter);
+    stream.writeFloat(gainParameter->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *gainParameter = stream.readFloat();
+    gainParameter->setValueNotifyingHost(stream.readFloat());
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
