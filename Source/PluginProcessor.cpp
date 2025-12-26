@@ -8,26 +8,19 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(rateParam = new juce::AudioParameterFloat(
-        "rate",
-        "Rate",
-        0.1f,
-        10.0f,
-        5.0f
-    ));
-    addParameter(depthParam = new juce::AudioParameterFloat(
-        "depth",
-        "Depth",
+    addParameter(driveAmountParam = new juce::AudioParameterFloat(
+        "driveAmount",
+        "Drive Amount",
         0.0f,
         1.0f,
-        0.7f
+        0.5f
     ));
-    addParameter(waveformParam = new juce::AudioParameterFloat(
-        "waveform",
-        "Waveform",
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        "mix",
+        "Mix",
         0.0f,
         1.0f,
-        0.0f
+        0.5f
     ));
 }
 
@@ -47,8 +40,7 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize tremolo state
-    phase = 0.0f;
+    // Initialize default state
     gainSmoothed = 1.0f;
 }
 
@@ -72,37 +64,39 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float rate = rateParam->get();
-        const float depth = depthParam->get();
-        const float waveform = waveformParam->get();
+        const float driveAmount = driveAmountParam->get();
+        const float mix = mixParam->get();
 
     // DSP Processing
-        // Calculate LFO phase increment
-        const float rateHz = rate * 19.0f + 1.0f;  // 1-20 Hz range
-        const float phaseIncrement = rateHz / static_cast<float>(getSampleRate());
-
         // Process each channel
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
-            float localPhase = phase;
 
             for (int sample = 0; sample < numSamples; ++sample)
             {
-                // Calculate tremolo modulation (0 to 1)
-                const float lfo = 0.5f * (1.0f + std::sin(localPhase * 2.0f * 3.14159265f));
-                const float modulation = 1.0f - (depth * (1.0f - lfo));
+                const float dry = channelData[sample];
 
-                channelData[sample] *= modulation;
+                // Apply pre-gain based on drive
+                const float preGain = 1.0f + driveAmount * 11.0f;
+                const float driven = dry * preGain;
 
-                localPhase += phaseIncrement;
-                if (localPhase >= 1.0f)
-                    localPhase -= 1.0f;
+                // Apply waveshaping function
+                // Soft clip (cubic)
+                float shaped;
+                if (driven > 1.0f)
+                    shaped = 0.666667f;
+                else if (driven < -1.0f)
+                    shaped = -0.666667f;
+                else
+                    shaped = driven - (driven * driven * driven) / 3.0f;
+
+                // Output compensation
+                const float compensated = shaped * 0.7f;
+
+                // Mix dry/wet
+                channelData[sample] = dry * (1.0f - mix) + compensated * mix;
             }
-
-            // Update phase (from last channel)
-            if (channel == buffer.getNumChannels() - 1)
-                phase = localPhase;
         }
 
     // Output sanitization: prevent NaN/Inf from reaching the host
