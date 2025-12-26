@@ -8,23 +8,16 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(delayTimeParam = new juce::AudioParameterFloat(
-        "delayTime",
-        "Delay Time",
-        0.01f,
-        1.0f,
-        0.3f
-    ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
+    addParameter(driveAmountParam = new juce::AudioParameterFloat(
+        "driveAmount",
+        "Drive",
         0.0f,
-        0.95f,
+        1.0f,
         0.5f
     ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
+    addParameter(outputLevelParam = new juce::AudioParameterFloat(
+        "outputLevel",
+        "Output",
         0.0f,
         1.0f,
         0.5f
@@ -47,12 +40,8 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize delay buffer
-    bufferSize = static_cast<int>(sampleRate * 1.0 + 1);
-    delayBuffer.setSize(2, bufferSize);
-    delayBuffer.clear();
-    writePosition[0] = 0;
-    writePosition[1] = 0;
+    // Initialize default state
+    gainSmoothed = 1.0f;
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -75,44 +64,32 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float delayTime = delayTimeParam->get();
-        const float feedback = feedbackParam->get();
-        const float mix = mixParam->get();
+        const float driveAmount = driveAmountParam->get();
+        const float outputLevel = outputLevelParam->get();
 
     // DSP Processing
-        // Calculate delay in samples
-        const float delaySamples = delayTime * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
-        const int delayInt = static_cast<int>(delaySamples);
-        const float delayFrac = delaySamples - static_cast<float>(delayInt);
-
         // Process each channel
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
-            auto* delayData = delayBuffer.getWritePointer(channel);
 
             for (int sample = 0; sample < numSamples; ++sample)
             {
                 const float dry = channelData[sample];
 
-                // Read from delay buffer with linear interpolation
-                int readPos = writePosition[channel] - delayInt;
-                if (readPos < 0) readPos += bufferSize;
-                int readPos2 = readPos - 1;
-                if (readPos2 < 0) readPos2 += bufferSize;
+                // Apply pre-gain based on drive
+                const float preGain = 1.0f + driveAmount * 11.0f;
+                const float driven = dry * preGain;
 
-                const float delayed = delayData[readPos] * (1.0f - delayFrac) + delayData[readPos2] * delayFrac;
+                // Apply waveshaping function
+                // Tanh soft saturation
+                const float shaped = std::tanh(driven);
 
-                // Write to delay buffer with feedback
-                delayData[writePosition[channel]] = dry + delayed * feedback * 0.9f;
-
-                // Increment write position
-                writePosition[channel]++;
-                if (writePosition[channel] >= bufferSize)
-                    writePosition[channel] = 0;
+                // Output compensation
+                const float compensated = shaped * 0.7f;
 
                 // Mix dry/wet
-                channelData[sample] = dry * (1.0f - mix) + delayed * mix;
+                channelData[sample] = dry * (1.0f - mix) + compensated * mix;
             }
         }
 
