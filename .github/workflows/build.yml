@@ -66,3 +66,104 @@ jobs:
           path: ${{ steps.find_vst3.outputs.vst3_path }}
           retention-days: 30
           if-no-files-found: error
+
+  # ============================================================================
+  # Headless Testing with pluginval
+  # Verifies VST3 compliance without requiring a DAW
+  # ============================================================================
+  test:
+    name: Test ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: vAIst-Windows
+            pluginval_url: "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip"
+            pluginval_exe: "pluginval.exe"
+          - os: macos-latest
+            artifact_name: vAIst-macOS
+            pluginval_url: "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_macOS.zip"
+            pluginval_exe: "pluginval.app/Contents/MacOS/pluginval"
+
+    steps:
+      - name: Download VST3 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./test-plugin
+
+      - name: List Downloaded Files
+        shell: bash
+        run: |
+          echo "=== Downloaded artifact contents ==="
+          find ./test-plugin -type f -o -type d | head -50
+
+      - name: Download pluginval
+        shell: bash
+        run: |
+          echo "Downloading pluginval from ${{ matrix.pluginval_url }}"
+          curl -L "${{ matrix.pluginval_url }}" -o pluginval.zip
+          unzip pluginval.zip
+          ls -la
+
+      # macOS: Remove quarantine attribute
+      - name: Prepare pluginval (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xattr -rd com.apple.quarantine pluginval.app || true
+          chmod +x pluginval.app/Contents/MacOS/pluginval
+
+      - name: Find VST3 Path
+        id: find_vst3
+        shell: bash
+        run: |
+          VST3_PATH=$(find ./test-plugin -name "*.vst3" -type d | head -1)
+          echo "vst3_path=$VST3_PATH" >> $GITHUB_OUTPUT
+          echo "Found VST3 at: $VST3_PATH"
+
+      # ========================================================================
+      # TC-101: Basic VST3 Validation (Strictness Level 5)
+      # Tests: Loading, Parameter registration, Audio processing
+      # ========================================================================
+      - name: "TC-101: pluginval Validation (Strictness 5)"
+        shell: bash
+        run: |
+          echo "=== Running pluginval with strictness level 5 ==="
+          echo "Testing: ${{ steps.find_vst3.outputs.vst3_path }}"
+          ./${{ matrix.pluginval_exe }} \
+            --validate-in-process \
+            --strictness-level 5 \
+            --timeout-ms 120000 \
+            --verbose \
+            --validate "${{ steps.find_vst3.outputs.vst3_path }}"
+
+      # ========================================================================
+      # TC-201: Parameter Automation Test (Strictness Level 10)
+      # Tests: Gain parameter responds to automation
+      # ========================================================================
+      - name: "TC-201: Parameter Automation Test (Strictness 10)"
+        shell: bash
+        run: |
+          echo "=== Running pluginval with strictness level 10 (Maximum) ==="
+          ./${{ matrix.pluginval_exe }} \
+            --validate-in-process \
+            --strictness-level 10 \
+            --timeout-ms 180000 \
+            --verbose \
+            --validate "${{ steps.find_vst3.outputs.vst3_path }}"
+
+      - name: Test Summary
+        if: success()
+        run: |
+          echo "=========================================="
+          echo "  *** ALL TESTS PASSED ***"
+          echo "=========================================="
+          echo ""
+          echo "TC-101: VST3 Basic Validation    ✅ PASS"
+          echo "TC-201: Parameter Automation     ✅ PASS"
+          echo ""
+          echo "The vAIst plugin is production-ready!"
+          echo "=========================================="
