@@ -6,12 +6,12 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(gainParameter = new juce::AudioParameterFloat(
-        "gain",           // Parameter ID
-        "Gain",          // Parameter name
-        0.0f,           // Minimum value
-        2.0f,           // Maximum value (200%)
-        1.0f            // Default value (100%)
+    addParameter(drive = new juce::AudioParameterFloat(
+        "drive",    // Parameter ID (lowercase, no spaces)
+        "Drive",  // Display name
+        0.0f,          // Minimum
+        1.0f,          // Maximum
+        0.5f           // Default
     ));
 }
 
@@ -29,62 +29,40 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    // Initialize DSP here if needed.  In this case, the gain is applied directly in processBlock.
     juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
-void VAIstAudioProcessor::releaseResources() {
-    // When playback stops, you can use this as an opportunity to free up any
-    // spare memory, etc.
-}
+void VAIstAudioProcessor::releaseResources() {}
 
-bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
-{
-  #if JucePlugin_IsMidiEffect
-    juce::ignoreUnused (layouts);
-    return true;
-  #else
-    // Only supports stereo.
+bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-
-    // This checks if the input layout matches the output layout
-   #if ! JucePlugin_IsSynth
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
-   #endif
-
     return true;
-  #endif
 }
 
-void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
-{
+void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
-
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // Apply gain
-    float currentGain = *gainParameter;
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer (channel);
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            channelData[sample] *= currentGain;
+            float in = channelData[sample];
+            float driveValue = drive->get();
+            float shaped = juce::jmap(in, -1.0f, 1.0f, -driveValue, driveValue);
+            shaped = std::tanh(shaped);
+            channelData[sample] = shaped;
         }
     }
 }
@@ -92,21 +70,16 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
-void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
-{
-    // Save the plugin's state here
+void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*gainParameter);
+    stream.writeFloat(*drive);
 }
 
-void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
-{
-    // Restore the plugin's state here
+void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *gainParameter = stream.readFloat();
+    *drive = stream.readFloat();
 }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VAIstAudioProcessor();
 }
