@@ -5,23 +5,23 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
     // Set up sliders
-    driveAmountSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    driveAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(driveAmountSlider);
-    driveAmountAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getDriveAmountParam(), driveAmountSlider, nullptr);
-    driveAmountLabel.setText("Drive", juce::dontSendNotification);
-    driveAmountLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(driveAmountLabel);
+    delayTimeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    delayTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(delayTimeSlider);
+    delayTimeAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getDelayTimeParam(), delayTimeSlider, nullptr);
+    delayTimeLabel.setText("Delay Time", juce::dontSendNotification);
+    delayTimeLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(delayTimeLabel);
 
-    outputLevelSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    outputLevelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(outputLevelSlider);
-    outputLevelAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getOutputLevelParam(), outputLevelSlider, nullptr);
-    outputLevelLabel.setText("Output", juce::dontSendNotification);
-    outputLevelLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(outputLevelLabel);
+    feedbackSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    feedbackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(feedbackSlider);
+    feedbackAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getFeedbackParam(), feedbackSlider, nullptr);
+    feedbackLabel.setText("Feedback", juce::dontSendNotification);
+    feedbackLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(feedbackLabel);
 
     mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
@@ -32,8 +32,17 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     mixLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(mixLabel);
 
+    saturationSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    saturationSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(saturationSlider);
+    saturationAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getSaturationParam(), saturationSlider, nullptr);
+    saturationLabel.setText("Saturation", juce::dontSendNotification);
+    saturationLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(saturationLabel);
 
-    setSize(400, 280);
+
+    setSize(400, 340);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -44,7 +53,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("SaturatorMkI", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("TapeDelay", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -52,16 +61,20 @@ void VAIstAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40);  // Space for title
 
-    auto driveAmountArea = area.removeFromTop(60);
-    driveAmountLabel.setBounds(driveAmountArea.removeFromTop(20));
-    driveAmountSlider.setBounds(driveAmountArea);
+    auto delayTimeArea = area.removeFromTop(60);
+    delayTimeLabel.setBounds(delayTimeArea.removeFromTop(20));
+    delayTimeSlider.setBounds(delayTimeArea);
 
-    auto outputLevelArea = area.removeFromTop(60);
-    outputLevelLabel.setBounds(outputLevelArea.removeFromTop(20));
-    outputLevelSlider.setBounds(outputLevelArea);
+    auto feedbackArea = area.removeFromTop(60);
+    feedbackLabel.setBounds(feedbackArea.removeFromTop(20));
+    feedbackSlider.setBounds(feedbackArea);
 
     auto mixArea = area.removeFromTop(60);
     mixLabel.setBounds(mixArea.removeFromTop(20));
     mixSlider.setBounds(mixArea);
+
+    auto saturationArea = area.removeFromTop(60);
+    saturationLabel.setBounds(saturationArea.removeFromTop(20));
+    saturationSlider.setBounds(saturationArea);
 
 }
