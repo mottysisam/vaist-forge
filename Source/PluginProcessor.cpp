@@ -54,7 +54,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
-    float gainValue = juce::Decibels::decibelsToGain(gainParameter->get());
+    float gainValue = juce::Decibels::decibelsToGain(gainParameter->getValue());
 
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
         auto* channelData = buffer.getWritePointer(channel);
@@ -70,7 +70,7 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(gainParameter->get());
+    stream.writeFloat(gainParameter->getValue());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
