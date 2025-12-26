@@ -52,7 +52,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     for (int channel = 0; channel < numChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
-        float currentVolume = *volume;
+        float currentVolume = volume->get();
 
         for (int sample = 0; sample < numSamples; ++sample) {
             channelData[sample] *= currentVolume;
