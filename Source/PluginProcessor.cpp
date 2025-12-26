@@ -7,29 +7,15 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(rateHzParam = new juce::AudioParameterFloat(
-        "rateHz",
-        "Rate",
-        0.1f,
-        10.0f,
-        1.0f
-    ));
-    addParameter(depthParam = new juce::AudioParameterFloat(
-        "depth",
-        "Depth",
+    addParameter(driveAmountParam = new juce::AudioParameterFloat(
+        "driveAmount",
+        "Drive",
         0.0f,
         1.0f,
-        0.7f
+        0.5f
     ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
-        -0.95f,
-        0.95f,
-        0.4f
-    ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
+    addParameter(mixAmountParam = new juce::AudioParameterFloat(
+        "mixAmount",
         "Mix",
         0.0f,
         1.0f,
@@ -76,29 +62,32 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values
-        const float rateHz = rateHzParam->get();
-        const float depth = depthParam->get();
-        const float feedback = feedbackParam->get();
-        const float mix = mixParam->get();
+        const float driveAmount = driveAmountParam->get();
+        const float mixAmount = mixAmountParam->get();
 
     // DSP Processing
-        // Convert dB to linear
-        const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
-        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
-
-        // Smooth gain changes
-        const float targetGain = gainLinear;
-        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
-        const float smoothGain = gainSmoothed;
-
-        // Apply gain to all channels
+        // Process each channel
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
 
             for (int sample = 0; sample < numSamples; ++sample)
             {
-                channelData[sample] *= smoothGain;
+                const float dry = channelData[sample];
+
+                // Apply pre-gain based on drive
+                const float preGain = 1.0f + driveAmount * 11.0f;
+                const float driven = dry * preGain;
+
+                // Apply waveshaping function
+                // Tanh soft saturation
+                const float shaped = std::tanh(driven);
+
+                // Output compensation
+                const float compensated = shaped * 0.7f;
+
+                // Mix dry/wet
+                channelData[sample] = dry * (1.0f - mixAmount) + compensated * mixAmount;
             }
         }
 }
