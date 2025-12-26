@@ -87,8 +87,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             if (readPos < 0) readPos += bufferSize;
 
             // === AI_LOGIC_START ===
-        float wetSample = delayData[readPos];
-delayData[writePosition] = dry + (wetSample * feedback);
+        delayData[writePosition] = dry + (delayData[readPos] * feedback);
         // === AI_LOGIC_END ===
 
             // Mix dry/wet
