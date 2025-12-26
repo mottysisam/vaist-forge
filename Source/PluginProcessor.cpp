@@ -4,7 +4,9 @@
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                     .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      sustainKnob(nullptr),
+      sensitivityKnob(nullptr)
 {
     addParameter(sustainKnob = new juce::AudioParameterFloat(
         "sustain",
@@ -43,8 +45,8 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    compressor.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (uint32)getTotalNumOutputChannels() });
-    gain.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (uint32)getTotalNumOutputChannels() });
+    compressor.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (juce::uint32)getTotalNumOutputChannels() });
+    gain.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), (juce::uint32)getTotalNumOutputChannels() });
 
     lastSampleRate = sampleRate;
 }
@@ -66,8 +68,8 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
-    float currentSustain = *sustainKnob;
-    float currentSensitivity = *sensitivityKnob;
+    float currentSustain = sustainKnob->get();
+    float currentSensitivity = sensitivityKnob->get();
 
     compressor.setRatio(1.0f + (currentSustain * 9.0f)); // Ratio from 1:1 to 10:1
     gain.setGainDecibels(currentSustain * 24.0f); // Makeup gain up to 24dB
@@ -90,8 +92,8 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*sustainKnob);
-    stream.writeFloat(*sensitivityKnob);
+    stream.writeFloat(sustainKnob->get());
+    stream.writeFloat(sensitivityKnob->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
