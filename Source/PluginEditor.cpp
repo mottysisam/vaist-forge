@@ -6,9 +6,9 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(drive = new juce::AudioParameterFloat(
-        "drive",    // Parameter ID (lowercase, no spaces)
-        "Drive",  // Display name
+    addParameter(volume = new juce::AudioParameterFloat(
+        "volume",    // Parameter ID (lowercase, no spaces)
+        "Volume",  // Display name
         0.0f,          // Minimum
         1.0f,          // Maximum
         0.5f           // Default
@@ -29,7 +29,7 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    // Initialize DSP here
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -46,23 +46,15 @@ bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
 void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
+    for (int channel = 0; channel < numChannels; ++channel) {
+        float* channelData = buffer.getWritePointer(channel);
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            float in = channelData[sample];
-            float driveValue = drive->get();
-            float shaped = juce::jmap(in, -1.0f, 1.0f, -driveValue, driveValue);
-            shaped = std::tanh(shaped);
-            channelData[sample] = shaped;
+        for (int sample = 0; sample < numSamples; ++sample) {
+            channelData[sample] *= *volume;
         }
     }
 }
@@ -71,13 +63,15 @@ bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    // Save state
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*drive);
+    stream.writeFloat(*volume);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *drive = stream.readFloat();
+    // Load state
+    juce::MemoryInputStream stream(data, static_cast<size_t> (sizeInBytes), false);
+    *volume = stream.readFloat();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
@@ -87,38 +81,40 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
-VAIstAudioProcessorEditor::VAIstAudioProcessorEditor (VAIstAudioProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p)
+VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
+    : AudioProcessorEditor(&p), processorRef(p)
 {
-    juce::ignoreUnused (processorRef);
+    juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
 
-    driveSlider.setSliderStyle(juce::Slider::SliderStyle::RotaryVerticalDrag);
-    driveSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
-    driveSlider.setRange(0.0, 1.0, 0.01);
-    addAndMakeVisible(driveSlider);
-    driveAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.drive,
-        driveSlider,
+    volumeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 20);
+    volumeSlider.setPopupDisplayEnabled(true);
+    volumeSlider.setTextValueSuffix(" Volume");
+    addAndMakeVisible(&volumeSlider);
+
+    volumeAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.volume,
+        volumeSlider,
         nullptr
     );
 
-    setSize (200, 300);
+    setSize(200, 300);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor()
 {
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }
 
-void VAIstAudioProcessorEditor::paint (juce::Graphics& g)
+void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-    g.setColour (juce::Colours::white);
-    g.setFont (15.0f);
-    g.drawFittedText ("VAIst Distortion", getLocalBounds(), juce::Justification::centredTop, 1);
+    g.fillAll(juce::Colours::black);
+    g.setColour(juce::Colours::white);
+    g.setFont(15.0f);
+    g.drawFittedText ("VAIst Gain", getLocalBounds(), juce::Justification::centredTop, 1);
 }
 
 void VAIstAudioProcessorEditor::resized()
 {
-    driveSlider.setBounds(50, 100, 100, 100);
+    volumeSlider.setBounds(40, 100, 120, 150);
 }
