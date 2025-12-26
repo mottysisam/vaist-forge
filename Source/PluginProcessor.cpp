@@ -72,12 +72,12 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(*drive);
+    stream.writeFloat(drive->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *drive = stream.readFloat();
+    drive->setValueNotifyingHost(stream.readFloat());
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
