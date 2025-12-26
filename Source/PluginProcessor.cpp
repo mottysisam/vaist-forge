@@ -6,7 +6,7 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    addParameter(gainParam = new juce::AudioParameterFloat(
+    addParameter(gainParameter = new juce::AudioParameterFloat(
         juce::ParameterID{"gain", 1}, "Gain", 0.0f, 2.0f, 1.0f));
 }
 
@@ -50,7 +50,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         buffer.clear(i, 0, buffer.getNumSamples());
 
     // Get parameter value
-    float gain = gainParam->get();
+    float gain = gainParameter->get();
 
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -61,8 +61,11 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         {
             // === AI_LOGIC_START ===
         
-    for (int sample = 0; sample < numSamples; sample++) {
-        channelData[sample] = channelData[sample] * gain;
+    gain = gainParameter;
+    for (int chan = 0; chan < channel; chan++) {
+        for (int sample = 0; sample < numSamples; sample++) {
+            channelData[sample] *= gain;
+        }
     }
 
         // === AI_LOGIC_END ===
@@ -76,13 +79,13 @@ juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAI
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     juce::MemoryOutputStream stream(destData, true);
-    stream.writeFloat(gainParam->get());
+    stream.writeFloat(gainParameter->get());
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
-    *gainParam = stream.readFloat();
+    *gainParameter = stream.readFloat();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
