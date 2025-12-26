@@ -370,6 +370,45 @@ class CppGenerator:
         }}"""
 
     # =========================================================================
+    # DSP Code Generation - Tremolo
+    # =========================================================================
+
+    @staticmethod
+    def generate_tremolo_dsp(params: list[PluginParameter]) -> str:
+        """Generate tremolo DSP code."""
+        # Find rate and depth parameters
+        rate_param = next((p.name for p in params if 'rate' in p.name.lower() or 'speed' in p.name.lower()), 'rate')
+        depth_param = next((p.name for p in params if 'depth' in p.name.lower() or 'amount' in p.name.lower()), 'depth')
+
+        return f"""        // Calculate LFO phase increment
+        const float rateHz = {rate_param} * 19.0f + 1.0f;  // 1-20 Hz range
+        const float phaseIncrement = rateHz / static_cast<float>(getSampleRate());
+
+        // Process each channel
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {{
+            auto* channelData = buffer.getWritePointer(channel);
+            float localPhase = phase;
+
+            for (int sample = 0; sample < numSamples; ++sample)
+            {{
+                // Calculate tremolo modulation (0 to 1)
+                const float lfo = 0.5f * (1.0f + std::sin(localPhase * 2.0f * 3.14159265f));
+                const float modulation = 1.0f - ({depth_param} * (1.0f - lfo));
+
+                channelData[sample] *= modulation;
+
+                localPhase += phaseIncrement;
+                if (localPhase >= 1.0f)
+                    localPhase -= 1.0f;
+            }}
+
+            // Update phase (from last channel)
+            if (channel == buffer.getNumChannels() - 1)
+                phase = localPhase;
+        }}"""
+
+    # =========================================================================
     # Complete File Generation
     # =========================================================================
 
@@ -393,6 +432,7 @@ class CppGenerator:
         # Assemble the complete file
         return f'''#include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
@@ -441,11 +481,24 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     const int numSamples = buffer.getNumSamples();
 
-    // Read parameter values
+    // Read parameter values with defensive clamping
 {param_reads}
 
     // DSP Processing
 {dsp_code}
+
+    // Output sanitization: prevent NaN/Inf from reaching the host
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {{
+        auto* channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < numSamples; ++sample)
+        {{
+            if (!std::isfinite(channelData[sample]))
+                channelData[sample] = 0.0f;
+            else
+                channelData[sample] = juce::jlimit(-1.0f, 1.0f, channelData[sample]);
+        }}
+    }}
 }}
 
 bool VAIstAudioProcessor::hasEditor() const {{ return true; }}
@@ -531,6 +584,9 @@ void VAIstAudioProcessorEditor::resized()
             dsp = response.gain_dsp or GainDSP()
             return cls.generate_gain_dsp(dsp, response.parameters)
 
+        elif response.category == PluginCategory.TREMOLO:
+            return cls.generate_tremolo_dsp(response.parameters)
+
         else:
             # Default: simple gain passthrough
             return cls.generate_gain_dsp(GainDSP(), response.parameters)
@@ -556,8 +612,13 @@ void VAIstAudioProcessorEditor::resized()
         elif response.category == PluginCategory.GAIN:
             return """    // Initialize gain smoothing
     gainSmoothed = 1.0f;"""
+        elif response.category == PluginCategory.TREMOLO:
+            return """    // Initialize tremolo state
+    phase = 0.0f;
+    gainSmoothed = 1.0f;"""
         else:
-            return "    // No special initialization needed"
+            return """    // Initialize default state
+    gainSmoothed = 1.0f;"""
 
     @classmethod
     def _generate_member_variables(cls, response: PluginResponse) -> str:
@@ -571,7 +632,17 @@ void VAIstAudioProcessorEditor::resized()
     int writePosition[2] = {0, 0};"""
         elif response.category == PluginCategory.GAIN:
             return """    float gainSmoothed = 1.0f;"""
-        return ""
+        elif response.category == PluginCategory.TREMOLO:
+            return """    float phase = 0.0f;
+    float gainSmoothed = 1.0f;"""
+        elif response.category == PluginCategory.CHORUS:
+            return """    float lfoPhase = 0.0f;
+    juce::AudioBuffer<float> delayBuffer;
+    int writePosition = 0;"""
+        else:
+            # Default: all unknown categories get gainSmoothed for safety
+            # since they fall through to gain DSP
+            return """    float gainSmoothed = 1.0f;"""
 
     @classmethod
     def _generate_slider_initialization(cls, params: list[PluginParameter]) -> str:
