@@ -11,16 +11,14 @@ VAIstAudioProcessor::VAIstAudioProcessor()
     addParameter(sustainKnob = new juce::AudioParameterFloat(
         "sustain",
         "Sustain",
-        0.0f,
-        1.0f,
+        juce::NormalisableRange<float>(0.0f, 1.0f),
         0.5f
     ));
 
     addParameter(sensitivityKnob = new juce::AudioParameterFloat(
         "sensitivity",
         "Sensitivity",
-        0.0f,
-        1.0f,
+        juce::NormalisableRange<float>(0.0f, 1.0f),
         0.5f
     ));
 
