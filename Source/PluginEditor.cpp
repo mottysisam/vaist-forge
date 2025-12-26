@@ -9,10 +9,10 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     gainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
     gainSlider.setRange(0.0, 2.0, 0.01);
-    gainSlider.setValue(p.gainParameter->get());
+    gainSlider.setValue(p.getGainParameter()->get());
     gainSlider.onValueChange = [this] {
-        processorRef.gainParameter->setValueNotifyingHost(
-            processorRef.gainParameter->getNormalisableRange().convertTo0to1(
+        processorRef.getGainParameter()->setValueNotifyingHost(
+            processorRef.getGainParameter()->getNormalisableRange().convertTo0to1(
                 static_cast<float>(gainSlider.getValue())));
     };
     addAndMakeVisible(gainSlider);
