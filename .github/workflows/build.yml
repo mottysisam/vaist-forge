@@ -93,13 +93,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./test-plugin
+          path: ./artifact-download
 
-      - name: List Downloaded Files
+      - name: Prepare VST3 Bundle
         shell: bash
         run: |
           echo "=== Downloaded artifact contents ==="
-          find ./test-plugin -type f -o -type d | head -50
+          find ./artifact-download -type f -o -type d | head -50
+          echo ""
+          echo "=== Preparing VST3 bundle ==="
+          # The artifact downloads the VST3 bundle contents, need to rename to .vst3
+          mv ./artifact-download ./vAIst_Plugin.vst3
+          echo "VST3 bundle ready at: ./vAIst_Plugin.vst3"
+          ls -la ./vAIst_Plugin.vst3/
 
       - name: Download pluginval
         shell: bash
@@ -116,13 +122,13 @@ jobs:
           xattr -rd com.apple.quarantine pluginval.app || true
           chmod +x pluginval.app/Contents/MacOS/pluginval
 
-      - name: Find VST3 Path
+      - name: Set VST3 Path
         id: find_vst3
         shell: bash
         run: |
-          VST3_PATH=$(find ./test-plugin -name "*.vst3" -type d | head -1)
+          VST3_PATH="./vAIst_Plugin.vst3"
           echo "vst3_path=$VST3_PATH" >> $GITHUB_OUTPUT
-          echo "Found VST3 at: $VST3_PATH"
+          echo "VST3 Path: $VST3_PATH"
 
       # ========================================================================
       # TC-101: Basic VST3 Validation (Strictness Level 5)
