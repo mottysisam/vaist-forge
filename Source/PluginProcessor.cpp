@@ -60,7 +60,15 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // === AI_LOGIC_START ===
-        channelData[sample] *= gain;
+        
+	for (int channel = 0; channel < this->channel; ++channel)
+	{
+		for (int sample = 0; sample < numSamples; ++sample)
+		{
+			channelData[sample] *= gain;
+		}
+	}
+
         // === AI_LOGIC_END ===
         }
     }
