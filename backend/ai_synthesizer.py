@@ -2,11 +2,16 @@
 vAIst AI Synthesizer
 AI code generation with Gemini (primary) and Claude (fallback).
 
-Supports two generation modes:
-1. Template-based: AI generates only DSP logic, injected into pre-built templates
-2. Full generation: AI generates complete files (fallback for unsupported types)
+Supports three generation modes (in priority order):
+1. Schema-based: AI outputs JSON → Python generates perfect C++ (ZERO typos)
+2. Template-based: AI generates only DSP logic, injected into pre-built templates
+3. Full generation: AI generates complete files (fallback for unsupported types)
+
+The Schema-based mode eliminates 100% of AI typos in variable names and syntax
+by having Python templates generate the C++ code deterministically.
 """
 
+import json
 import logging
 from typing import Optional, Tuple
 
@@ -23,6 +28,13 @@ from backend.prompts.system_prompts import (
 from backend.code_parser import CodeParser
 from backend.template_manager import TemplateManager, PluginType, PluginTemplate
 from backend.code_verifier import CodeVerifier, verify_before_commit
+from backend.schemas import (
+    PluginResponse,
+    PluginCategory,
+    get_gemini_schema,
+    get_schema_prompt,
+)
+from backend.cpp_generator import generate_from_schema, CppGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -63,27 +75,40 @@ class AISynthesizer:
             logger.warning("No Anthropic API key - Claude fallback disabled")
 
     async def generate_code(
-        self, user_prompt: str
+        self, user_prompt: str,
+        use_schema_mode: bool = True
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Generate VST code from user prompt.
 
-        Uses template-based generation for known plugin types (gain, waveshaper,
-        filter, delay) and falls back to full generation for generic/unknown types.
+        Generation priority:
+        1. Schema-based: AI outputs JSON → Python generates C++ (ZERO typos)
+        2. Template-based: AI generates DSP logic → injected into templates
+        3. Full generation: AI generates complete files (fallback)
 
         Args:
             user_prompt: User's plugin description
+            use_schema_mode: Whether to try schema-based generation first
 
         Returns:
             Tuple of (processor_code, editor_code, error_message)
             On success: (code, code, None)
             On failure: (None, None, error_message)
         """
-        # Detect plugin type from prompt
+        # === MODE 1: Schema-Based Generation (ZERO TYPOS) ===
+        if use_schema_mode:
+            logger.info("Attempting schema-based generation (zero-typo mode)")
+            processor, editor, error = await self._generate_with_schema(user_prompt)
+            if processor and editor:
+                return processor, editor, None
+            logger.warning(f"Schema-based generation failed: {error}")
+            # Fall through to template-based mode
+
+        # Detect plugin type from prompt for template-based mode
         plugin_type = TemplateManager.detect_plugin_type(user_prompt)
         logger.info(f"Detected plugin type: {plugin_type.value}")
 
-        # Use template-based generation for known types
+        # === MODE 2: Template-Based Generation ===
         if plugin_type != PluginType.GENERIC:
             processor, editor, error = await self._generate_with_template(
                 user_prompt, plugin_type
@@ -93,7 +118,7 @@ class AISynthesizer:
             logger.warning(f"Template-based generation failed: {error}")
             # Don't fall through to full generation - template should work
 
-        # Full generation for GENERIC type or as primary for unknown
+        # === MODE 3: Full Generation (Fallback) ===
         logger.info("Using full code generation mode")
 
         # Try Gemini first (primary coder)
@@ -112,6 +137,87 @@ class AISynthesizer:
             return None, None, f"All AI models failed. Last error: {error}"
 
         return None, None, f"Gemini failed: {error}. No Claude fallback available."
+
+    async def _generate_with_schema(
+        self, user_prompt: str
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Generate code using schema-based structured output.
+
+        This mode eliminates 100% of AI typos by:
+        1. AI outputs structured JSON (parameters, DSP config)
+        2. Python generates the exact C++ code from templates
+
+        The AI NEVER writes C++ code directly. It only provides data.
+
+        Args:
+            user_prompt: User's plugin description
+
+        Returns:
+            Tuple of (processor_code, editor_code, error_message)
+        """
+        try:
+            logger.info("Schema-based generation: AI will output JSON, Python writes C++")
+
+            # Build the schema prompt
+            schema_prompt = get_schema_prompt()
+            full_prompt = f"""Based on the following plugin request, output a structured JSON response.
+
+{schema_prompt}
+
+USER REQUEST:
+{user_prompt}
+
+Remember: Output ONLY valid JSON matching the schema above. No markdown, no explanation."""
+
+            # Call Gemini with JSON response mode
+            response = self.gemini_client.models.generate_content(
+                model=self.settings.GEMINI_MODEL,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=2048,
+                ),
+            )
+
+            if not response.text:
+                return None, None, "Gemini returned empty response for schema mode"
+
+            # Parse JSON response
+            try:
+                json_response = json.loads(response.text)
+                logger.info(f"Schema response: {json.dumps(json_response, indent=2)[:500]}...")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON: {response.text[:500]}")
+                return None, None, f"AI returned invalid JSON: {str(e)}"
+
+            # Validate against Pydantic schema
+            try:
+                plugin_response = PluginResponse(**json_response)
+                logger.info(f"Validated schema: {plugin_response.plugin_name} ({plugin_response.category.value})")
+                logger.info(f"Parameters: {[p.name for p in plugin_response.parameters]}")
+            except Exception as e:
+                logger.warning(f"Schema validation failed: {str(e)}")
+                return None, None, f"Schema validation failed: {str(e)}"
+
+            # Generate C++ code from validated schema
+            processor_code, editor_code = generate_from_schema(plugin_response)
+
+            # Validate the generated code
+            is_valid, validation_error = CodeParser.validate_code(
+                processor_code, editor_code
+            )
+            if not is_valid:
+                # This should never happen since we control the templates
+                logger.error(f"Template validation failed (unexpected): {validation_error}")
+                return None, None, f"Template code validation failed: {validation_error}"
+
+            logger.info(f"Schema-based generation successful: {plugin_response.plugin_name}")
+            return processor_code, editor_code, None
+
+        except Exception as e:
+            logger.exception("Schema-based generation error")
+            return None, None, f"Schema generation error: {str(e)}"
 
     async def _generate_with_template(
         self, user_prompt: str, plugin_type: PluginType
