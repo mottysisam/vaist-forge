@@ -7,13 +7,31 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(gainParam = new juce::AudioParameterFloat(
-        "gain",
-        "Gain",
-        "Gain", // Display Name
-        juce::NormalisableRange<float>(0.0f, 1.0f),
+    addParameter(rateParam = new juce::AudioParameterFloat(
+        "rate",
+        "Rate",
+        0.1f,
+        20.0f,
+        5.0f
+    ));
+    addParameter(depthParam = new juce::AudioParameterFloat(
+        "depth",
+        "Depth",
+        0.0f,
+        1.0f,
         0.5f
     ));
+    addParameter(waveformParam = new juce::AudioParameterFloat(
+        "waveform",
+        "Waveform",
+        0.0f,
+        1.0f,
+        0.0f
+    ));
+
+    // Initialize gain-related variables
+    gain = 0.5f; // Initial gain value (0.0 to 1.0)
+    gainSmoothed = gain;
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -31,9 +49,10 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize gain smoothing
-    gainSmoothed = 1.0f;
+    //juce::ignoreUnused(sampleRate, samplesPerBlock);
+    // No special initialization needed
+    currentSampleRate = sampleRate;
+    
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -54,31 +73,32 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     juce::ScopedNoDenormals noDenormals;
 
     const int numSamples = buffer.getNumSamples();
-    const double sampleRate = getSampleRate(); // Get sample rate
 
     // Read parameter values
-        const float gain = gainParam->get();
+    const float rate = rateParam->get();
+    const float depth = depthParam->get();
+    const float waveform = waveformParam->get();
 
     // DSP Processing
-        // Convert dB to linear
-        const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
-        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
+    // Convert dB to linear
+    const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
+    const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
 
-        // Smooth gain changes
-        const float targetGain = gainLinear;
-        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(sampleRate)) * (targetGain - gainSmoothed);
-        const float smoothGain = gainSmoothed;
+    // Smooth gain changes
+    const float targetGain = gainLinear;
+    gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(currentSampleRate)) * (targetGain - gainSmoothed);
+    const float smoothGain = gainSmoothed;
 
-        // Apply gain to all channels
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    // Apply gain to all channels
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = buffer.getWritePointer(channel);
-
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                channelData[sample] *= smoothGain;
-            }
+            channelData[sample] *= smoothGain;
         }
+    }
 }
 
 bool VAIstAudioProcessor::hasEditor() const { return true; }
