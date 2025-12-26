@@ -7,9 +7,30 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(gainParam = new juce::AudioParameterFloat(
-        "gain",
-        "Gain",
+    addParameter(rateHzParam = new juce::AudioParameterFloat(
+        "rateHz",
+        "Rate",
+        0.1f,
+        10.0f,
+        1.0f
+    ));
+    addParameter(depthParam = new juce::AudioParameterFloat(
+        "depth",
+        "Depth",
+        0.0f,
+        1.0f,
+        0.7f
+    ));
+    addParameter(feedbackParam = new juce::AudioParameterFloat(
+        "feedback",
+        "Feedback",
+        -0.95f,
+        0.95f,
+        0.4f
+    ));
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        "mix",
+        "Mix",
         0.0f,
         1.0f,
         0.5f
@@ -32,8 +53,7 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize gain smoothing
-    gainSmoothed = 1.0f;
+    // No special initialization needed
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -56,7 +76,10 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values
-        const float gain = gainParam->get();
+        const float rateHz = rateHzParam->get();
+        const float depth = depthParam->get();
+        const float feedback = feedbackParam->get();
+        const float mix = mixParam->get();
 
     // DSP Processing
         // Convert dB to linear
