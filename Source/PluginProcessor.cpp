@@ -1,26 +1,25 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include <cmath>
 
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    // Initialize parameters
-    addParameter(driveAmountParam = new juce::AudioParameterFloat(
-        "driveAmount",
-        "Drive Amount",
-        0.0f,
-        1.0f,
-        0.5f
+    addParameter(cutoff = new juce::AudioParameterFloat(
+        "cutoff",
+        "Cutoff",
+        20.0f,
+        20000.0f,
+        1000.0f
     ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
+
+    addParameter(resonance = new juce::AudioParameterFloat(
+        "resonance",
+        "Resonance",
         0.0f,
         1.0f,
-        0.5f
+        0.707f
     ));
 }
 
@@ -37,17 +36,19 @@ void VAIstAudioProcessor::setCurrentProgram(int index) { juce::ignoreUnused(inde
 const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignoreUnused(index); return {}; }
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
-void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
-{
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize default state
-    gainSmoothed = 1.0f;
+void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = samplesPerBlock;
+    spec.numChannels = getTotalNumOutputChannels();
+
+    filter.prepare(spec);
+    updateFilter();
 }
 
 void VAIstAudioProcessor::releaseResources() {}
 
-bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
-{
+bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
@@ -56,81 +57,40 @@ bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
     return true;
 }
 
-void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
-{
+void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
-    const int numSamples = buffer.getNumSamples();
+    updateFilter();
 
-    // Read parameter values with defensive clamping
-        const float driveAmount = driveAmountParam->get();
-        const float mix = mixParam->get();
-
-    // DSP Processing
-        // Process each channel
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-        {
-            auto* channelData = buffer.getWritePointer(channel);
-
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                const float dry = channelData[sample];
-
-                // Apply pre-gain based on drive
-                const float preGain = 1.0f + driveAmount * 11.0f;
-                const float driven = dry * preGain;
-
-                // Apply waveshaping function
-                // Soft clip (cubic)
-                float shaped;
-                if (driven > 1.0f)
-                    shaped = 0.666667f;
-                else if (driven < -1.0f)
-                    shaped = -0.666667f;
-                else
-                    shaped = driven - (driven * driven * driven) / 3.0f;
-
-                // Output compensation
-                const float compensated = shaped * 0.7f;
-
-                // Mix dry/wet
-                channelData[sample] = dry * (1.0f - mix) + compensated * mix;
-            }
-        }
-
-    // Output sanitization: prevent NaN/Inf from reaching the host
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            if (!std::isfinite(channelData[sample]))
-                channelData[sample] = 0.0f;
-            else
-                channelData[sample] = juce::jlimit(-1.0f, 1.0f, channelData[sample]);
-        }
-    }
+    juce::dsp::AudioBlock<float> block(buffer);
+    filter.process(juce::dsp::ProcessContextReplacing<float>(block));
 }
 
 bool VAIstAudioProcessor::hasEditor() const { return true; }
+juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
-juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor()
-{
-    return new VAIstAudioProcessorEditor(*this);
+void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    juce::MemoryOutputStream stream(destData, true);
+    stream.writeFloat(*cutoff);
+    stream.writeFloat(*resonance);
 }
 
-void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
-{
-    juce::ignoreUnused(destData);
+void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
+    juce::MemoryInputStream stream(data, sizeInBytes, false);
+    cutoff->setValueNotifyingHost(stream.readFloat());
+    resonance->setValueNotifyingHost(stream.readFloat());
+    updateFilter();
 }
 
-void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
-{
-    juce::ignoreUnused(data, sizeInBytes);
+void VAIstAudioProcessor::updateFilter() {
+    filter. coefficients = juce::dsp::IIR::Coefficients<float>::makeLowPass(
+        getSampleRate(),
+        *cutoff,
+        *resonance
+    );
 }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VAIstAudioProcessor();
 }
