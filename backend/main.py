@@ -172,21 +172,12 @@ async def generate_plugin_task(task_id: str, prompt: str):
         )
 
         if not is_consistent:
-            logger.warning(f"[{task_id}] Header consistency check found issues: {consistency_errors}")
-            # If we have headers but still have errors, it's a generation issue
-            # If we don't have headers, that's expected in fallback mode
-            if processor_h and editor_h:
-                # We have headers but still have errors - regenerate or fail
-                logger.error(f"[{task_id}] Generated code has undeclared identifiers, failing early")
-                task_manager.update_task(
-                    task_id,
-                    status=TaskStatus.FAILED,
-                    error_message=f"Code validation failed: {'; '.join(consistency_errors[:3])}",
-                )
-                return
-            else:
-                # No headers - this will likely fail on CI, but let it try
-                logger.warning(f"[{task_id}] No headers generated - build may fail due to missing declarations")
+            # Header validation is ADVISORY only - log warnings but don't block
+            # The JUCE_TYPES allowlist can't cover all inherited methods, so we
+            # let CI be the final arbiter of correctness
+            logger.warning(f"[{task_id}] Header consistency advisory: {len(consistency_errors)} potential issues")
+            for err in consistency_errors[:5]:
+                logger.warning(f"[{task_id}]   - {err}")
         else:
             logger.info(f"[{task_id}] Header consistency check PASSED")
 

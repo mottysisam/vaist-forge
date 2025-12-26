@@ -410,17 +410,42 @@ class HeaderConsistencyValidator:
 
     # Common JUCE types that are always available
     JUCE_TYPES = {
-        'juce', 'AudioProcessor', 'AudioProcessorEditor', 'AudioBuffer',
+        # Core JUCE macros/defines
+        'juce', 'JUCE_CALLTYPE', 'JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR',
+        'JucePlugin_Name', 'JucePlugin_Manufacturer', 'JucePlugin_ManufacturerCode',
+        'JucePlugin_PluginCode', 'JucePlugin_IsSynth', 'JucePlugin_WantsMidiInput',
+        'JucePlugin_ProducesMidiOutput', 'JucePlugin_IsMidiEffect',
+        # Factory functions
+        'createPluginFilter', 'createEditor',
+        # AudioProcessor API (class and inherited methods)
+        'AudioProcessor', 'AudioProcessorEditor', 'AudioBuffer',
         'MidiBuffer', 'AudioParameterFloat', 'AudioParameterInt',
         'AudioParameterBool', 'AudioParameterChoice',
+        'BusesLayout', 'BusesProperties', 'AudioChannelSet',
+        'AudioProcessorValueTreeState', 'RangedAudioParameter',
+        'addParameter', 'getParameters', 'getNumParameters',
+        'setStateInformation', 'getStateInformation',
+        'processBlock', 'prepareToPlay', 'releaseResources',
+        'acceptsMidi', 'producesMidi', 'isMidiEffect', 'getTailLengthSeconds',
+        'getName', 'hasEditor', 'isBusesLayoutSupported',
+        'getNumPrograms', 'getCurrentProgram', 'setCurrentProgram', 'getProgramName',
+        'changeProgramName', 'getSampleRate', 'getBlockSize',
+        # GUI Components
         'Slider', 'Label', 'ComboBox', 'TextButton', 'ToggleButton',
         'Graphics', 'Colour', 'Rectangle', 'String', 'StringArray',
         'File', 'MemoryBlock', 'XmlElement', 'ValueTree',
-        'Component', 'Timer', 'LookAndFeel', 'Font',
+        'Component', 'Timer', 'LookAndFeel', 'Font', 'Justification',
+        'Colours', 'Path', 'AffineTransform', 'Image', 'ImageCache',
+        # DSP
         'dsp', 'ProcessSpec', 'AudioBlock', 'ProcessContextReplacing',
         'IIR', 'Coefficients', 'Filter', 'Oscillator', 'Gain',
-        'MathConstants', 'pi', 'twoPi',
+        'StateVariableFilter', 'Reverb', 'Convolution', 'Compressor',
+        'DelayLine', 'Oversampling', 'WaveShaper',
+        # Math
+        'MathConstants', 'pi', 'twoPi', 'jmin', 'jmax', 'jlimit', 'jmap',
+        # Memory
         'ScopedPointer', 'OwnedArray', 'ReferenceCountedObjectPtr',
+        'HeapBlock', 'ScopedLock', 'CriticalSection',
     }
 
     # C++ standard identifiers
