@@ -35,14 +35,20 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getGainParam() { return gainParam; }
+    juce::AudioParameterFloat* getRateHzParam() { return rateHzParam; }
+    juce::AudioParameterFloat* getDepthParam() { return depthParam; }
+    juce::AudioParameterFloat* getFeedbackParam() { return feedbackParam; }
+    juce::AudioParameterFloat* getMixParam() { return mixParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* gainParam = nullptr;
+    juce::AudioParameterFloat* rateHzParam = nullptr;
+    juce::AudioParameterFloat* depthParam = nullptr;
+    juce::AudioParameterFloat* feedbackParam = nullptr;
+    juce::AudioParameterFloat* mixParam = nullptr;
 
     // DSP state
-    float gainSmoothed = 1.0f;
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessor)
 };
