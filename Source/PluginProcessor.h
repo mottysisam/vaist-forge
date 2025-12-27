@@ -35,18 +35,20 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getDriveAmountParam() { return driveAmountParam; }
-    juce::AudioParameterFloat* getToneControlParam() { return toneControlParam; }
-    juce::AudioParameterFloat* getVolumeParam() { return volumeParam; }
+    juce::AudioParameterFloat* getDelayTimeParam() { return delayTimeParam; }
+    juce::AudioParameterFloat* getFeedbackParam() { return feedbackParam; }
+    juce::AudioParameterFloat* getMixParam() { return mixParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* driveAmountParam = nullptr;
-    juce::AudioParameterFloat* toneControlParam = nullptr;
-    juce::AudioParameterFloat* volumeParam = nullptr;
+    juce::AudioParameterFloat* delayTimeParam = nullptr;
+    juce::AudioParameterFloat* feedbackParam = nullptr;
+    juce::AudioParameterFloat* mixParam = nullptr;
 
     // DSP state
-    float gainSmoothed = 1.0f;
+    juce::AudioBuffer<float> delayBuffer;
+    int bufferSize = 0;
+    int writePosition[2] = {0, 0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessor)
 };
