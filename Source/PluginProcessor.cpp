@@ -5,47 +5,56 @@
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                     .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
     // Initialize parameters
-    addParameter(rateParam = new juce::AudioParameterFloat(
-        "rate",
-        "Rate",
-        0.1f,
-        10.0f,
-        1.0f
-    ));
-    addParameter(depthParam = new juce::AudioParameterFloat(
-        "depth",
-        "Depth",
-        0.0f,
-        1.0f,
-        0.5f
-    ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
-        -0.95f,
-        0.95f,
-        0.0f
-    ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
-        0.0f,
-        1.0f,
-        0.5f
-    ));
-    addParameter(gainParam = new juce::AudioParameterFloat(
-        "gain",
-        "Gain",
-        0.0f,
-        1.0f,
-        0.5f
-    ));
+    rateParam = apvts.getRawParameterValue("rate");
+    depthParam = apvts.getRawParameterValue("depth");
+    feedbackParam = apvts.getRawParameterValue("feedback");
+    mixParam = apvts.getRawParameterValue("mix");
+    gainParam = apvts.getRawParameterValue("gain");
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
+
+juce::AudioProcessorValueTreeState::ParameterLayout VAIstAudioProcessor::createParameterLayout()
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "rate",
+        "Rate",
+        juce::NormalisableRange<float>(0.1f, 10.0f, 0.1f),
+        1.0f
+    ));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "depth",
+        "Depth",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.5f
+    ));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "feedback",
+        "Feedback",
+        juce::NormalisableRange<float>(-0.95f, 0.95f, 0.01f),
+        0.0f
+    ));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "mix",
+        "Mix",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.5f
+    ));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "gain",
+        "Gain",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.5f
+    ));
+
+    return layout;
+}
 
 const juce::String VAIstAudioProcessor::getName() const { return JucePlugin_Name; }
 bool VAIstAudioProcessor::acceptsMidi() const { return false; }
@@ -99,11 +108,11 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-    const float rate = rateParam->get();
-    const float depth = depthParam->get();
-    const float feedback = feedbackParam->get();
-    const float mix = mixParam->get();
-    const float gain = gainParam->get();
+    const float rate = rateParam->load();
+    const float depth = depthParam->load();
+    const float feedback = feedbackParam->load();
+    const float mix = mixParam->load();
+    const float gain = gainParam->load();
 
     // DSP Processing
     // Convert dB to linear
@@ -144,17 +153,27 @@ bool VAIstAudioProcessor::hasEditor() const { return true; }
 
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor()
 {
-    return new VAIstAudioProcessorEditor(*this);
+    return new VAIstAudioProcessorEditor(*this, apvts);
 }
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    juce::ignoreUnused(destData);
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    copyXmlToBinary(*xml, destData);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    juce::ignoreUnused(data, sizeInBytes);
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+
+    if (xmlState.get() != nullptr)
+    {
+        if (xmlState->hasTagName(apvts.state.getType()))
+        {
+            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+        }
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
