@@ -1,0 +1,56 @@
+{
+  "name": "BasicFlangerOpus",
+  "vendor": "vAIst",
+  "version": "1.0.0",
+  "sdkVersion": "2.0.0",
+  "thumbnail": "",
+  "keywords": [
+    "effect",
+    "audio",
+    "wasm"
+  ],
+  "isInstrument": false,
+  "description": "A clean and easy-to-use flanger effect perfect for adding subtle motion or classic jet-plane sweeps to your tracks. Designed for beginners with intuitive controls and efficient CPU usage.",
+  "parameters": [
+    {
+      "id": "rate",
+      "name": "Rate",
+      "type": "float",
+      "min": 0.05,
+      "max": 5,
+      "default": 0.5,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "depth",
+      "name": "Depth",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "type": "float",
+      "min": 0,
+      "max": 95,
+      "default": 30,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "mix",
+      "name": "Mix",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    }
+  ]
+}
