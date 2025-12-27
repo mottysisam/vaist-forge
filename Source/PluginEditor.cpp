@@ -5,26 +5,35 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
     // Set up sliders
-    volumeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(volumeSlider);
-    volumeAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getVolumeParam(), volumeSlider, nullptr);
-    volumeLabel.setText("Volume", juce::dontSendNotification);
-    volumeLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(volumeLabel);
+    rateSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(rateSlider);
+    rateAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getRateParam(), rateSlider, nullptr);
+    rateLabel.setText("Rate", juce::dontSendNotification);
+    rateLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(rateLabel);
 
-    gainSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(gainSlider);
-    gainAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getGainParam(), gainSlider, nullptr);
-    gainLabel.setText("Gain", juce::dontSendNotification);
-    gainLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(gainLabel);
+    depthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    depthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(depthSlider);
+    depthAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getDepthParam(), depthSlider, nullptr);
+    depthLabel.setText("Depth", juce::dontSendNotification);
+    depthLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(depthLabel);
+
+    waveformSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    waveformSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(waveformSlider);
+    waveformAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getWaveformParam(), waveformSlider, nullptr);
+    waveformLabel.setText("Waveform", juce::dontSendNotification);
+    waveformLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(waveformLabel);
 
 
-    setSize(400, 220);
+    setSize(400, 280);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -35,7 +44,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("SimpleGain", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("TremoloMatic", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -43,12 +52,16 @@ void VAIstAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40);  // Space for title
 
-    auto volumeArea = area.removeFromTop(60);
-    volumeLabel.setBounds(volumeArea.removeFromTop(20));
-    volumeSlider.setBounds(volumeArea);
+    auto rateArea = area.removeFromTop(60);
+    rateLabel.setBounds(rateArea.removeFromTop(20));
+    rateSlider.setBounds(rateArea);
 
-    auto gainArea = area.removeFromTop(60);
-    gainLabel.setBounds(gainArea.removeFromTop(20));
-    gainSlider.setBounds(gainArea);
+    auto depthArea = area.removeFromTop(60);
+    depthLabel.setBounds(depthArea.removeFromTop(20));
+    depthSlider.setBounds(depthArea);
+
+    auto waveformArea = area.removeFromTop(60);
+    waveformLabel.setBounds(waveformArea.removeFromTop(20));
+    waveformSlider.setBounds(waveformArea);
 
 }

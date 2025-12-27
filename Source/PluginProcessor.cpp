@@ -8,19 +8,26 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(volumeParam = new juce::AudioParameterFloat(
-        "volume",
-        "Volume",
+    addParameter(rateParam = new juce::AudioParameterFloat(
+        "rate",
+        "Rate",
+        0.1f,
+        10.0f,
+        5.0f
+    ));
+    addParameter(depthParam = new juce::AudioParameterFloat(
+        "depth",
+        "Depth",
         0.0f,
         1.0f,
         0.5f
     ));
-    addParameter(gainParam = new juce::AudioParameterFloat(
-        "gain",
-        "Gain",
+    addParameter(waveformParam = new juce::AudioParameterFloat(
+        "waveform",
+        "Waveform",
         0.0f,
         1.0f,
-        0.5f
+        0.0f
     ));
 }
 
@@ -40,7 +47,8 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize gain smoothing
+    // Initialize tremolo state
+    phase = 0.0f;
     gainSmoothed = 1.0f;
 }
 
@@ -64,28 +72,37 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float volume = volumeParam->get();
-        const float gain = gainParam->get();
+        const float rate = rateParam->get();
+        const float depth = depthParam->get();
+        const float waveform = waveformParam->get();
 
     // DSP Processing
-        // Convert dB to linear
-        const float gainDb = volume * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
-        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
+        // Calculate LFO phase increment
+        const float rateHz = rate * 19.0f + 1.0f;  // 1-20 Hz range
+        const float phaseIncrement = rateHz / static_cast<float>(getSampleRate());
 
-        // Smooth gain changes
-        const float targetGain = gainLinear;
-        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
-        const float smoothGain = gainSmoothed;
-
-        // Apply gain to all channels
+        // Process each channel
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
+            float localPhase = phase;
 
             for (int sample = 0; sample < numSamples; ++sample)
             {
-                channelData[sample] *= smoothGain;
+                // Calculate tremolo modulation (0 to 1)
+                const float lfo = 0.5f * (1.0f + std::sin(localPhase * 2.0f * 3.14159265f));
+                const float modulation = 1.0f - (depth * (1.0f - lfo));
+
+                channelData[sample] *= modulation;
+
+                localPhase += phaseIncrement;
+                if (localPhase >= 1.0f)
+                    localPhase -= 1.0f;
             }
+
+            // Update phase (from last channel)
+            if (channel == buffer.getNumChannels() - 1)
+                phase = localPhase;
         }
 
     // Output sanitization: prevent NaN/Inf from reaching the host
