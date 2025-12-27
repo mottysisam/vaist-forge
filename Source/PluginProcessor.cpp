@@ -8,33 +8,19 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(delayTimeParam = new juce::AudioParameterFloat(
-        "delayTime",
-        "Delay Time",
-        0.01f,
-        1.0f,
-        0.3f
-    ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
+    addParameter(volumeParam = new juce::AudioParameterFloat(
+        "volume",
+        "Volume",
         0.0f,
-        0.95f,
+        1.0f,
         0.5f
     ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
+    addParameter(gainParam = new juce::AudioParameterFloat(
+        "gain",
+        "Gain",
         0.0f,
         1.0f,
-        0.7f
-    ));
-    addParameter(saturationParam = new juce::AudioParameterFloat(
-        "saturation",
-        "Saturation",
-        0.0f,
-        1.0f,
-        0.2f
+        0.5f
     ));
 }
 
@@ -54,12 +40,8 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize delay buffer
-    bufferSize = static_cast<int>(sampleRate * 1.0 + 1);
-    delayBuffer.setSize(2, bufferSize);
-    delayBuffer.clear();
-    writePosition[0] = 0;
-    writePosition[1] = 0;
+    // Initialize gain smoothing
+    gainSmoothed = 1.0f;
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -82,45 +64,27 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float delayTime = delayTimeParam->get();
-        const float feedback = feedbackParam->get();
-        const float mix = mixParam->get();
-        const float saturation = saturationParam->get();
+        const float volume = volumeParam->get();
+        const float gain = gainParam->get();
 
     // DSP Processing
-        // Calculate delay in samples
-        const float delaySamples = delayTime * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
-        const int delayInt = static_cast<int>(delaySamples);
-        const float delayFrac = delaySamples - static_cast<float>(delayInt);
+        // Convert dB to linear
+        const float gainDb = volume * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
+        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
 
-        // Process each channel
+        // Smooth gain changes
+        const float targetGain = gainLinear;
+        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
+        const float smoothGain = gainSmoothed;
+
+        // Apply gain to all channels
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
-            auto* delayData = delayBuffer.getWritePointer(channel);
 
             for (int sample = 0; sample < numSamples; ++sample)
             {
-                const float dry = channelData[sample];
-
-                // Read from delay buffer with linear interpolation
-                int readPos = writePosition[channel] - delayInt;
-                if (readPos < 0) readPos += bufferSize;
-                int readPos2 = readPos - 1;
-                if (readPos2 < 0) readPos2 += bufferSize;
-
-                const float delayed = delayData[readPos] * (1.0f - delayFrac) + delayData[readPos2] * delayFrac;
-
-                // Write to delay buffer with feedback
-                delayData[writePosition[channel]] = dry + delayed * feedback * 0.9f;
-
-                // Increment write position
-                writePosition[channel]++;
-                if (writePosition[channel] >= bufferSize)
-                    writePosition[channel] = 0;
-
-                // Mix dry/wet
-                channelData[sample] = dry * (1.0f - mix) + delayed * mix;
+                channelData[sample] *= smoothGain;
             }
         }
 
