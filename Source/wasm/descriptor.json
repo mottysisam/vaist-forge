@@ -1,0 +1,126 @@
+{
+  "name": "AdvancedFlangerOpus",
+  "vendor": "vAIst",
+  "version": "1.0.0",
+  "sdkVersion": "2.0.0",
+  "thumbnail": "",
+  "keywords": [
+    "effect",
+    "audio",
+    "wasm"
+  ],
+  "isInstrument": false,
+  "description": "A professional-grade stereo flanger effect with deep modulation capabilities, multiple LFO waveforms, and precise manual control. Designed for sound designers seeking everything from subtle movement to extreme jet-engine sweeps.",
+  "parameters": [
+    {
+      "id": "rate",
+      "name": "Rate",
+      "type": "float",
+      "min": 0.01,
+      "max": 10,
+      "default": 0.5,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "depth",
+      "name": "Depth",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "manualDelay",
+      "name": "Manual",
+      "type": "float",
+      "min": 0.1,
+      "max": 10,
+      "default": 2,
+      "unit": "ms",
+      "choices": []
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "type": "float",
+      "min": -99,
+      "max": 99,
+      "default": 40,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "lfoWaveform",
+      "name": "LFO Shape",
+      "type": "float",
+      "min": 0,
+      "max": 4,
+      "default": 0,
+      "unit": "",
+      "choices": []
+    },
+    {
+      "id": "stereoPhase",
+      "name": "Stereo Phase",
+      "type": "float",
+      "min": 0,
+      "max": 180,
+      "default": 90,
+      "unit": "°",
+      "choices": []
+    },
+    {
+      "id": "stereoWidth",
+      "name": "Stereo Width",
+      "type": "float",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "highpassFreq",
+      "name": "HP Filter",
+      "type": "float",
+      "min": 20,
+      "max": 2000,
+      "default": 20,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "lowpassFreq",
+      "name": "LP Filter",
+      "type": "float",
+      "min": 1000,
+      "max": 20000,
+      "default": 20000,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "mix",
+      "name": "Dry/Wet",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "outputGain",
+      "name": "Output",
+      "type": "float",
+      "min": -24,
+      "max": 12,
+      "default": 0,
+      "unit": "dB",
+      "choices": []
+    }
+  ]
+}

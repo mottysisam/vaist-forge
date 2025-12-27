@@ -5,14 +5,32 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
     // Set up sliders
-    delayTimeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    delayTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(delayTimeSlider);
-    delayTimeAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getDelayTimeParam(), delayTimeSlider, nullptr);
-    delayTimeLabel.setText("Delay Time", juce::dontSendNotification);
-    delayTimeLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(delayTimeLabel);
+    rateSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(rateSlider);
+    rateAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getRateParam(), rateSlider, nullptr);
+    rateLabel.setText("Rate", juce::dontSendNotification);
+    rateLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(rateLabel);
+
+    depthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    depthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(depthSlider);
+    depthAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getDepthParam(), depthSlider, nullptr);
+    depthLabel.setText("Depth", juce::dontSendNotification);
+    depthLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(depthLabel);
+
+    manualDelaySlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    manualDelaySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(manualDelaySlider);
+    manualDelayAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getManualDelayParam(), manualDelaySlider, nullptr);
+    manualDelayLabel.setText("Manual", juce::dontSendNotification);
+    manualDelayLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(manualDelayLabel);
 
     feedbackSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     feedbackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
@@ -23,26 +41,71 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     feedbackLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(feedbackLabel);
 
+    lfoWaveformSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    lfoWaveformSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(lfoWaveformSlider);
+    lfoWaveformAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getLfoWaveformParam(), lfoWaveformSlider, nullptr);
+    lfoWaveformLabel.setText("LFO Shape", juce::dontSendNotification);
+    lfoWaveformLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(lfoWaveformLabel);
+
+    stereoPhaseSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    stereoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(stereoPhaseSlider);
+    stereoPhaseAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getStereoPhaseParam(), stereoPhaseSlider, nullptr);
+    stereoPhaseLabel.setText("Stereo Phase", juce::dontSendNotification);
+    stereoPhaseLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(stereoPhaseLabel);
+
+    stereoWidthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    stereoWidthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(stereoWidthSlider);
+    stereoWidthAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getStereoWidthParam(), stereoWidthSlider, nullptr);
+    stereoWidthLabel.setText("Stereo Width", juce::dontSendNotification);
+    stereoWidthLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(stereoWidthLabel);
+
+    highpassFreqSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    highpassFreqSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(highpassFreqSlider);
+    highpassFreqAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getHighpassFreqParam(), highpassFreqSlider, nullptr);
+    highpassFreqLabel.setText("HP Filter", juce::dontSendNotification);
+    highpassFreqLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(highpassFreqLabel);
+
+    lowpassFreqSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    lowpassFreqSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(lowpassFreqSlider);
+    lowpassFreqAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getLowpassFreqParam(), lowpassFreqSlider, nullptr);
+    lowpassFreqLabel.setText("LP Filter", juce::dontSendNotification);
+    lowpassFreqLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(lowpassFreqLabel);
+
     mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
     addAndMakeVisible(mixSlider);
     mixAttachment = std::make_unique<juce::SliderParameterAttachment>(
         *processorRef.getMixParam(), mixSlider, nullptr);
-    mixLabel.setText("Mix", juce::dontSendNotification);
+    mixLabel.setText("Dry/Wet", juce::dontSendNotification);
     mixLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(mixLabel);
 
-    saturationSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    saturationSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(saturationSlider);
-    saturationAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getSaturationParam(), saturationSlider, nullptr);
-    saturationLabel.setText("Saturation", juce::dontSendNotification);
-    saturationLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(saturationLabel);
+    outputGainSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    outputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(outputGainSlider);
+    outputGainAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getOutputGainParam(), outputGainSlider, nullptr);
+    outputGainLabel.setText("Output", juce::dontSendNotification);
+    outputGainLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(outputGainLabel);
 
 
-    setSize(400, 340);
+    setSize(400, 760);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -53,7 +116,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("TapeDelay", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("AdvancedFlangerOpus", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -61,20 +124,48 @@ void VAIstAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40);  // Space for title
 
-    auto delayTimeArea = area.removeFromTop(60);
-    delayTimeLabel.setBounds(delayTimeArea.removeFromTop(20));
-    delayTimeSlider.setBounds(delayTimeArea);
+    auto rateArea = area.removeFromTop(60);
+    rateLabel.setBounds(rateArea.removeFromTop(20));
+    rateSlider.setBounds(rateArea);
+
+    auto depthArea = area.removeFromTop(60);
+    depthLabel.setBounds(depthArea.removeFromTop(20));
+    depthSlider.setBounds(depthArea);
+
+    auto manualDelayArea = area.removeFromTop(60);
+    manualDelayLabel.setBounds(manualDelayArea.removeFromTop(20));
+    manualDelaySlider.setBounds(manualDelayArea);
 
     auto feedbackArea = area.removeFromTop(60);
     feedbackLabel.setBounds(feedbackArea.removeFromTop(20));
     feedbackSlider.setBounds(feedbackArea);
 
+    auto lfoWaveformArea = area.removeFromTop(60);
+    lfoWaveformLabel.setBounds(lfoWaveformArea.removeFromTop(20));
+    lfoWaveformSlider.setBounds(lfoWaveformArea);
+
+    auto stereoPhaseArea = area.removeFromTop(60);
+    stereoPhaseLabel.setBounds(stereoPhaseArea.removeFromTop(20));
+    stereoPhaseSlider.setBounds(stereoPhaseArea);
+
+    auto stereoWidthArea = area.removeFromTop(60);
+    stereoWidthLabel.setBounds(stereoWidthArea.removeFromTop(20));
+    stereoWidthSlider.setBounds(stereoWidthArea);
+
+    auto highpassFreqArea = area.removeFromTop(60);
+    highpassFreqLabel.setBounds(highpassFreqArea.removeFromTop(20));
+    highpassFreqSlider.setBounds(highpassFreqArea);
+
+    auto lowpassFreqArea = area.removeFromTop(60);
+    lowpassFreqLabel.setBounds(lowpassFreqArea.removeFromTop(20));
+    lowpassFreqSlider.setBounds(lowpassFreqArea);
+
     auto mixArea = area.removeFromTop(60);
     mixLabel.setBounds(mixArea.removeFromTop(20));
     mixSlider.setBounds(mixArea);
 
-    auto saturationArea = area.removeFromTop(60);
-    saturationLabel.setBounds(saturationArea.removeFromTop(20));
-    saturationSlider.setBounds(saturationArea);
+    auto outputGainArea = area.removeFromTop(60);
+    outputGainLabel.setBounds(outputGainArea.removeFromTop(20));
+    outputGainSlider.setBounds(outputGainArea);
 
 }
