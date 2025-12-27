@@ -35,14 +35,12 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getAmountParam() { return amountParam; }
-    juce::AudioParameterFloat* getWarmthParam() { return warmthParam; }
+    juce::AudioParameterFloat* getDriveAmountParam() { return driveAmountParam; }
     juce::AudioParameterFloat* getMixParam() { return mixParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* amountParam = nullptr;
-    juce::AudioParameterFloat* warmthParam = nullptr;
+    juce::AudioParameterFloat* driveAmountParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
 
     // DSP state

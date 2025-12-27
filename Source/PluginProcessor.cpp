@@ -8,16 +8,9 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(amountParam = new juce::AudioParameterFloat(
-        "amount",
-        "Amount",
-        0.0f,
-        1.0f,
-        0.5f
-    ));
-    addParameter(warmthParam = new juce::AudioParameterFloat(
-        "warmth",
-        "Warmth",
+    addParameter(driveAmountParam = new juce::AudioParameterFloat(
+        "driveAmount",
+        "Drive Amount",
         0.0f,
         1.0f,
         0.5f
@@ -71,8 +64,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float amount = amountParam->get();
-        const float warmth = warmthParam->get();
+        const float driveAmount = driveAmountParam->get();
         const float mix = mixParam->get();
 
     // DSP Processing
@@ -86,18 +78,12 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 const float dry = channelData[sample];
 
                 // Apply pre-gain based on drive
-                const float preGain = 1.0f + drive * 11.0f;
+                const float preGain = 1.0f + driveAmount * 11.0f;
                 const float driven = dry * preGain;
 
                 // Apply waveshaping function
-                // Soft clip (cubic)
-                float shaped;
-                if (driven > 1.0f)
-                    shaped = 0.666667f;
-                else if (driven < -1.0f)
-                    shaped = -0.666667f;
-                else
-                    shaped = driven - (driven * driven * driven) / 3.0f;
+                // Tanh soft saturation
+                const float shaped = std::tanh(driven);
 
                 // Output compensation
                 const float compensated = shaped * 0.7f;
