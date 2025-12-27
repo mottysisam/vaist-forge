@@ -94,12 +94,20 @@ jobs:
 
       - name: Upload WASM to R2
         if: steps.check_wasm.outputs.wasm_exists == 'true' && steps.project_id.outputs.is_build_branch == 'true'
+        continue-on-error: true  # Don't fail build if R2 upload fails
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           PROJECT_ID: ${{ steps.project_id.outputs.project_id }}
         run: |
+          # Check if R2 secrets are configured
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "⚠️ R2 secrets not configured - skipping WASM upload"
+            echo "To enable WASM preview, add these secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY"
+            exit 0
+          fi
+
           # Install rclone
           curl https://rclone.org/install.sh | sudo bash
 
@@ -123,11 +131,18 @@ jobs:
 
       - name: Notify Backend WASM Ready
         if: steps.check_wasm.outputs.wasm_exists == 'true' && steps.project_id.outputs.is_build_branch == 'true'
+        continue-on-error: true  # Don't fail build if webhook fails
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           BACKEND_WEBHOOK_SECRET: ${{ secrets.BACKEND_WEBHOOK_SECRET }}
           PROJECT_ID: ${{ steps.project_id.outputs.project_id }}
         run: |
+          # Check if webhook secrets are configured
+          if [ -z "$BACKEND_URL" ] || [ -z "$BACKEND_WEBHOOK_SECRET" ]; then
+            echo "⚠️ Webhook secrets not configured - skipping notification"
+            exit 0
+          fi
+
           # Build JSON payload
           PAYLOAD="{\"projectId\": \"${PROJECT_ID}\", \"wasmKey\": \"wasm/${PROJECT_ID}/vaist-processor.wasm\"}"
 
@@ -138,7 +153,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Hub-Signature-256: ${SIGNATURE}" \
             -d "${PAYLOAD}" \
-            --fail-with-body || echo "Backend notification failed (may not be configured)"
+            --fail-with-body || echo "Backend notification failed"
 
   # ============================================================================
   # Native VST3 Build (macOS and Windows)

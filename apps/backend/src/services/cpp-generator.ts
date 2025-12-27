@@ -142,6 +142,10 @@ export class CppGenerator {
         case 'delay':
           dspBlocks.push(this.generateDelayDsp(params));
           break;
+        case 'flanger':
+        case 'chorus':
+          dspBlocks.push(this.generateFlangerDsp(params));
+          break;
         case 'compressor':
           dspBlocks.push(this.generateCompressorDsp(params));
           break;
@@ -273,17 +277,20 @@ ${generateOutputSanitization()}
    * Algorithm matches dsp-templates.ts for parity with WASM preview.
    */
   static generateDelayDsp(params: PluginParameter[]): string {
-    const timeParam = findParamId(params, 'time', 'delay', 'delayTime');
+    const timeParam = findParamId(params, 'time', 'delay', 'delayTime', 'centerDelay');
     const feedbackParam = findParamId(params, 'feedback', 'fb');
     const mixParam = findParamId(params, 'mix', 'wet');
 
     // Algorithm matches generateDelayCore() and generateDelaySampleProcessing()
     return `        // Delay processing (shared DSP algorithm)
-        const float delaySamples = ${timeParam} * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
-        const int delayInt = static_cast<int>(delaySamples);
+        // Clamp delay time to buffer size to prevent overflow
+        const float maxDelaySec = static_cast<float>(bufferSize - 1) / static_cast<float>(getSampleRate());
+        const float clampedTime = juce::jlimit(0.0f, maxDelaySec, ${timeParam});
+        const float delaySamples = clampedTime * static_cast<float>(getSampleRate());
+        const int delayInt = juce::jlimit(1, bufferSize - 2, static_cast<int>(delaySamples));
         const float delayFrac = delaySamples - static_cast<float>(delayInt);
 
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        for (int channel = 0; channel < juce::jmin(buffer.getNumChannels(), 2); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
             auto* delayData = delayBuffer.getWritePointer(channel);
@@ -307,6 +314,70 @@ ${generateOutputSanitization()}
                 writePosition[channel]++;
                 if (writePosition[channel] >= bufferSize)
                     writePosition[channel] = 0;
+
+                // Mix dry/wet
+                channelData[sample] = dry * (1.0f - ${mixParam}) + delayed * ${mixParam};
+            }
+        }`;
+  }
+
+  /**
+   * Generate flanger DSP code.
+   * Flanger is a modulated delay with LFO.
+   */
+  static generateFlangerDsp(params: PluginParameter[]): string {
+    const rateParam = findParamId(params, 'rate', 'speed', 'lfoRate');
+    const depthParam = findParamId(params, 'depth', 'amount', 'intensity');
+    const feedbackParam = findParamId(params, 'feedback', 'fb', 'regen');
+    const mixParam = findParamId(params, 'mix', 'wet');
+
+    return `        // Flanger processing (modulated delay with LFO)
+        const float sampleRateFloat = static_cast<float>(getSampleRate());
+
+        // Calculate LFO parameters
+        const float lfoFreq = ${rateParam};  // LFO rate in Hz
+        const float lfoPhaseInc = lfoFreq / sampleRateFloat;
+
+        // Flanger delay range: 1-10ms modulated by LFO
+        const float minDelay = 0.001f * sampleRateFloat;  // 1ms in samples
+        const float maxDelay = 0.010f * sampleRateFloat;  // 10ms in samples
+        const float delayRange = (maxDelay - minDelay) * ${depthParam};
+
+        for (int channel = 0; channel < juce::jmin(buffer.getNumChannels(), 2); ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+            auto* delayData = delayBuffer.getWritePointer(channel);
+
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const float dry = channelData[sample];
+
+                // Calculate modulated delay time using LFO
+                const float lfoValue = 0.5f * (1.0f + std::sin(2.0f * juce::MathConstants<float>::pi * lfoPhase[channel]));
+                const float delaySamples = minDelay + lfoValue * delayRange;
+                const int delayInt = juce::jlimit(1, bufferSize - 2, static_cast<int>(delaySamples));
+                const float delayFrac = delaySamples - static_cast<float>(delayInt);
+
+                // Read from delay buffer with linear interpolation
+                int readPos = writePosition[channel] - delayInt;
+                if (readPos < 0) readPos += bufferSize;
+                int readPos2 = readPos - 1;
+                if (readPos2 < 0) readPos2 += bufferSize;
+
+                const float delayed = delayData[readPos] * (1.0f - delayFrac) + delayData[readPos2] * delayFrac;
+
+                // Write to delay buffer with feedback
+                delayData[writePosition[channel]] = dry + delayed * ${feedbackParam} * 0.9f;
+
+                // Increment write position
+                writePosition[channel]++;
+                if (writePosition[channel] >= bufferSize)
+                    writePosition[channel] = 0;
+
+                // Increment LFO phase
+                lfoPhase[channel] += lfoPhaseInc;
+                if (lfoPhase[channel] >= 1.0f)
+                    lfoPhase[channel] -= 1.0f;
 
                 // Mix dry/wet
                 channelData[sample] = dry * (1.0f - ${mixParam}) + delayed * ${mixParam};
@@ -398,6 +469,13 @@ ${generateOutputSanitization()}
           vars.push('    int bufferSize = 0;');
           vars.push('    int writePosition[2] = {0, 0};');
           break;
+        case 'flanger':
+        case 'chorus':
+          vars.push('    juce::AudioBuffer<float> delayBuffer;');
+          vars.push('    int bufferSize = 0;');
+          vars.push('    int writePosition[2] = {0, 0};');
+          vars.push('    float lfoPhase[2] = {0.0f, 0.0f};');
+          break;
         case 'compressor':
           vars.push('    float envelope[2] = {0.0f, 0.0f};');
           break;
@@ -430,6 +508,17 @@ ${generateOutputSanitization()}
     delayBuffer.clear();
     writePosition[0] = 0;
     writePosition[1] = 0;`);
+          break;
+        case 'flanger':
+        case 'chorus':
+          inits.push(`    // Initialize flanger delay buffer (max 50ms for flanger)
+    bufferSize = static_cast<int>(sampleRate * 0.05 + 1);
+    delayBuffer.setSize(2, bufferSize);
+    delayBuffer.clear();
+    writePosition[0] = 0;
+    writePosition[1] = 0;
+    lfoPhase[0] = 0.0f;
+    lfoPhase[1] = 0.25f;  // Stereo offset for wider sound`);
           break;
         case 'compressor':
           inits.push(`    // Initialize compressor envelope
