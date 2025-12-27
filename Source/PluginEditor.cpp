@@ -5,14 +5,23 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
     // Set up sliders
-    delayTimeSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    delayTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(delayTimeSlider);
-    delayTimeAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getDelayTimeParam(), delayTimeSlider, nullptr);
-    delayTimeLabel.setText("Delay Time", juce::dontSendNotification);
-    delayTimeLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(delayTimeLabel);
+    rateSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(rateSlider);
+    rateAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getRateParam(), rateSlider, nullptr);
+    rateLabel.setText("LFO Rate", juce::dontSendNotification);
+    rateLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(rateLabel);
+
+    depthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    depthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(depthSlider);
+    depthAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getDepthParam(), depthSlider, nullptr);
+    depthLabel.setText("Modulation Depth", juce::dontSendNotification);
+    depthLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(depthLabel);
 
     feedbackSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     feedbackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
@@ -23,6 +32,15 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     feedbackLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(feedbackLabel);
 
+    centerDelaySlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    centerDelaySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(centerDelaySlider);
+    centerDelayAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getCenterDelayParam(), centerDelaySlider, nullptr);
+    centerDelayLabel.setText("Center Delay", juce::dontSendNotification);
+    centerDelayLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(centerDelayLabel);
+
     mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
     addAndMakeVisible(mixSlider);
@@ -32,17 +50,8 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     mixLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(mixLabel);
 
-    saturationSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    saturationSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-    addAndMakeVisible(saturationSlider);
-    saturationAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.getSaturationParam(), saturationSlider, nullptr);
-    saturationLabel.setText("Saturation", juce::dontSendNotification);
-    saturationLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(saturationLabel);
 
-
-    setSize(400, 340);
+    setSize(400, 400);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -53,7 +62,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("TapeDelay", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("SimpleFlangerPlugin", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -61,20 +70,24 @@ void VAIstAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40);  // Space for title
 
-    auto delayTimeArea = area.removeFromTop(60);
-    delayTimeLabel.setBounds(delayTimeArea.removeFromTop(20));
-    delayTimeSlider.setBounds(delayTimeArea);
+    auto rateArea = area.removeFromTop(60);
+    rateLabel.setBounds(rateArea.removeFromTop(20));
+    rateSlider.setBounds(rateArea);
+
+    auto depthArea = area.removeFromTop(60);
+    depthLabel.setBounds(depthArea.removeFromTop(20));
+    depthSlider.setBounds(depthArea);
 
     auto feedbackArea = area.removeFromTop(60);
     feedbackLabel.setBounds(feedbackArea.removeFromTop(20));
     feedbackSlider.setBounds(feedbackArea);
 
+    auto centerDelayArea = area.removeFromTop(60);
+    centerDelayLabel.setBounds(centerDelayArea.removeFromTop(20));
+    centerDelaySlider.setBounds(centerDelayArea);
+
     auto mixArea = area.removeFromTop(60);
     mixLabel.setBounds(mixArea.removeFromTop(20));
     mixSlider.setBounds(mixArea);
-
-    auto saturationArea = area.removeFromTop(60);
-    saturationLabel.setBounds(saturationArea.removeFromTop(20));
-    saturationSlider.setBounds(saturationArea);
 
 }
