@@ -35,22 +35,26 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getDelayTimeParam() { return delayTimeParam; }
+    juce::AudioParameterFloat* getRateParam() { return rateParam; }
+    juce::AudioParameterFloat* getDepthParam() { return depthParam; }
+    juce::AudioParameterFloat* getManualParam() { return manualParam; }
     juce::AudioParameterFloat* getFeedbackParam() { return feedbackParam; }
+    juce::AudioParameterFloat* getWaveformParam() { return waveformParam; }
+    juce::AudioParameterFloat* getOffsetParam() { return offsetParam; }
     juce::AudioParameterFloat* getMixParam() { return mixParam; }
-    juce::AudioParameterFloat* getSaturationParam() { return saturationParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* delayTimeParam = nullptr;
+    juce::AudioParameterFloat* rateParam = nullptr;
+    juce::AudioParameterFloat* depthParam = nullptr;
+    juce::AudioParameterFloat* manualParam = nullptr;
     juce::AudioParameterFloat* feedbackParam = nullptr;
+    juce::AudioParameterFloat* waveformParam = nullptr;
+    juce::AudioParameterFloat* offsetParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
-    juce::AudioParameterFloat* saturationParam = nullptr;
 
     // DSP state
-    juce::AudioBuffer<float> delayBuffer;
-    int bufferSize = 0;
-    int writePosition[2] = {0, 0};
+    float gainSmoothed = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessor)
 };

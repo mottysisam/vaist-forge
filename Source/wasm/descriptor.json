@@ -1,0 +1,86 @@
+{
+  "name": "AdvancedFlangerGemini",
+  "vendor": "vAIst",
+  "version": "1.0.0",
+  "sdkVersion": "2.0.0",
+  "thumbnail": "",
+  "keywords": [
+    "effect",
+    "audio",
+    "wasm"
+  ],
+  "isInstrument": false,
+  "description": "Advanced stereo flanger with multi-waveform modulation and phase offset for wide, swirling textures.",
+  "parameters": [
+    {
+      "id": "rate",
+      "name": "LFO Rate",
+      "type": "float",
+      "min": 0.1,
+      "max": 10,
+      "default": 0.5,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "depth",
+      "name": "Mod Depth",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 75,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "manual",
+      "name": "Center Delay",
+      "type": "float",
+      "min": 1,
+      "max": 20,
+      "default": 5,
+      "unit": "ms",
+      "choices": []
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "type": "float",
+      "min": -95,
+      "max": 95,
+      "default": 40,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "waveform",
+      "name": "Waveform",
+      "type": "float",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": "",
+      "choices": []
+    },
+    {
+      "id": "offset",
+      "name": "Stereo Offset",
+      "type": "float",
+      "min": 0,
+      "max": 180,
+      "default": 90,
+      "unit": "deg",
+      "choices": []
+    },
+    {
+      "id": "mix",
+      "name": "Dry/Wet",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    }
+  ]
+}
