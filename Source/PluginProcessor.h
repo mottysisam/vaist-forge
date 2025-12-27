@@ -37,20 +37,25 @@ public:
     // Parameter getters
     juce::AudioParameterFloat* getRateParam() { return rateParam; }
     juce::AudioParameterFloat* getDepthParam() { return depthParam; }
+    juce::AudioParameterFloat* getManualParam() { return manualParam; }
     juce::AudioParameterFloat* getFeedbackParam() { return feedbackParam; }
+    juce::AudioParameterFloat* getStereoPhaseParam() { return stereoPhaseParam; }
     juce::AudioParameterFloat* getMixParam() { return mixParam; }
 
 private:
     // Parameters
     juce::AudioParameterFloat* rateParam = nullptr;
     juce::AudioParameterFloat* depthParam = nullptr;
+    juce::AudioParameterFloat* manualParam = nullptr;
     juce::AudioParameterFloat* feedbackParam = nullptr;
+    juce::AudioParameterFloat* stereoPhaseParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
 
     // DSP state
-    float lfoPhase = 0.0f;
+    float gainSmoothed = 1.0f;
     juce::AudioBuffer<float> delayBuffer;
-    int writePosition = 0;
+    int bufferSize = 0;
+    int writePosition[2] = {0, 0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessor)
 };

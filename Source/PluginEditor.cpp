@@ -23,6 +23,15 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     depthLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(depthLabel);
 
+    manualSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    manualSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(manualSlider);
+    manualAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getManualParam(), manualSlider, nullptr);
+    manualLabel.setText("Manual", juce::dontSendNotification);
+    manualLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(manualLabel);
+
     feedbackSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     feedbackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
     addAndMakeVisible(feedbackSlider);
@@ -31,6 +40,15 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     feedbackLabel.setText("Feedback", juce::dontSendNotification);
     feedbackLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(feedbackLabel);
+
+    stereoPhaseSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    stereoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    addAndMakeVisible(stereoPhaseSlider);
+    stereoPhaseAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getStereoPhaseParam(), stereoPhaseSlider, nullptr);
+    stereoPhaseLabel.setText("Stereo Phase", juce::dontSendNotification);
+    stereoPhaseLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(stereoPhaseLabel);
 
     mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
@@ -42,7 +60,7 @@ VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     addAndMakeVisible(mixLabel);
 
 
-    setSize(400, 340);
+    setSize(400, 460);
 }
 
 VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
@@ -53,7 +71,7 @@ void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(0xfff39c12));
     g.setFont(juce::FontOptions(20.0f));
-    g.drawText("Flangerizer", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
+    g.drawText("FlangerPlugin", getLocalBounds().removeFromTop(40), juce::Justification::centred, true);
 }
 
 void VAIstAudioProcessorEditor::resized()
@@ -69,9 +87,17 @@ void VAIstAudioProcessorEditor::resized()
     depthLabel.setBounds(depthArea.removeFromTop(20));
     depthSlider.setBounds(depthArea);
 
+    auto manualArea = area.removeFromTop(60);
+    manualLabel.setBounds(manualArea.removeFromTop(20));
+    manualSlider.setBounds(manualArea);
+
     auto feedbackArea = area.removeFromTop(60);
     feedbackLabel.setBounds(feedbackArea.removeFromTop(20));
     feedbackSlider.setBounds(feedbackArea);
+
+    auto stereoPhaseArea = area.removeFromTop(60);
+    stereoPhaseLabel.setBounds(stereoPhaseArea.removeFromTop(20));
+    stereoPhaseSlider.setBounds(stereoPhaseArea);
 
     auto mixArea = area.removeFromTop(60);
     mixLabel.setBounds(mixArea.removeFromTop(20));

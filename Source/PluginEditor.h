@@ -23,9 +23,17 @@ private:
     juce::Label depthLabel;
     std::unique_ptr<juce::SliderParameterAttachment> depthAttachment;
 
+    juce::Slider manualSlider;
+    juce::Label manualLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> manualAttachment;
+
     juce::Slider feedbackSlider;
     juce::Label feedbackLabel;
     std::unique_ptr<juce::SliderParameterAttachment> feedbackAttachment;
+
+    juce::Slider stereoPhaseSlider;
+    juce::Label stereoPhaseLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> stereoPhaseAttachment;
 
     juce::Slider mixSlider;
     juce::Label mixLabel;
