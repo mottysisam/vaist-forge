@@ -8,33 +8,35 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(delayTimeParam = new juce::AudioParameterFloat(
-        "delayTime",
-        "Delay Time",
-        0.01f,
-        1.0f,
-        0.3f
-    ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
-        0.0f,
-        0.95f,
+    addParameter(rateParam = new juce::AudioParameterFloat(
+        juce::ParameterID("rate", 1),
+        "Rate",
+        juce::NormalisableRange<float>(0.05f, 10.0f),
         0.5f
     ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
-        0.0f,
-        1.0f,
-        0.7f
+    addParameter(depthParam = new juce::AudioParameterFloat(
+        juce::ParameterID("depth", 1),
+        "Depth",
+        juce::NormalisableRange<float>(0.0f, 100.0f),
+        50.0f
     ));
-    addParameter(saturationParam = new juce::AudioParameterFloat(
-        "saturation",
-        "Saturation",
-        0.0f,
-        1.0f,
-        0.2f
+    addParameter(feedbackParam = new juce::AudioParameterFloat(
+        juce::ParameterID("feedback", 1),
+        "Feedback",
+        juce::NormalisableRange<float>(-0.95f, 0.95f),
+        0.5f
+    ));
+    addParameter(centerDelayParam = new juce::AudioParameterFloat(
+        juce::ParameterID("centerDelay", 1),
+        "Center Delay",
+        juce::NormalisableRange<float>(1.0f, 5.0f),
+        2.0f
+    ));
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        juce::ParameterID("mix", 1),
+        "Mix",
+        juce::NormalisableRange<float>(0.0f, 1.0f),
+        0.5f
     ));
 }
 
@@ -54,7 +56,7 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize delay buffer
+    // Initialize delay buffer (max 1 second)
     bufferSize = static_cast<int>(sampleRate * 1.0 + 1);
     delayBuffer.setSize(2, bufferSize);
     delayBuffer.clear();
@@ -81,19 +83,21 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     const int numSamples = buffer.getNumSamples();
 
-    // Read parameter values with defensive clamping
-        const float delayTime = delayTimeParam->get();
+    // Read parameter values
+        const float rate = rateParam->get();
+        const float depth = depthParam->get();
         const float feedback = feedbackParam->get();
+        const float centerDelay = centerDelayParam->get();
         const float mix = mixParam->get();
-        const float saturation = saturationParam->get();
 
     // DSP Processing
-        // Calculate delay in samples
-        const float delaySamples = delayTime * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
+        // Passthrough for: Oscillator
+
+        // Delay processing (shared DSP algorithm)
+        const float delaySamples = centerDelay * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
         const int delayInt = static_cast<int>(delaySamples);
         const float delayFrac = delaySamples - static_cast<float>(delayInt);
 
-        // Process each channel
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
@@ -103,7 +107,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             {
                 const float dry = channelData[sample];
 
-                // Read from delay buffer with linear interpolation
+                // Read from delay buffer with linear interpolation (matches dsp-templates.ts)
                 int readPos = writePosition[channel] - delayInt;
                 if (readPos < 0) readPos += bufferSize;
                 int readPos2 = readPos - 1;
@@ -111,7 +115,7 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
                 const float delayed = delayData[readPos] * (1.0f - delayFrac) + delayData[readPos2] * delayFrac;
 
-                // Write to delay buffer with feedback
+                // Write to delay buffer with feedback (0.9 limiter - matches dsp-templates.ts)
                 delayData[writePosition[channel]] = dry + delayed * feedback * 0.9f;
 
                 // Increment write position
@@ -123,6 +127,9 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 channelData[sample] = dry * (1.0f - mix) + delayed * mix;
             }
         }
+
+        // Wet/dry mixing is handled inline with effect processing
+        // Mix parameter: mix
 
     // Output sanitization: prevent NaN/Inf from reaching the host
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)

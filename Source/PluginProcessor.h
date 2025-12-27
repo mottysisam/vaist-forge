@@ -35,19 +35,22 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Parameter getters
-    juce::AudioParameterFloat* getDelayTimeParam() { return delayTimeParam; }
+    juce::AudioParameterFloat* getRateParam() { return rateParam; }
+    juce::AudioParameterFloat* getDepthParam() { return depthParam; }
     juce::AudioParameterFloat* getFeedbackParam() { return feedbackParam; }
+    juce::AudioParameterFloat* getCenterDelayParam() { return centerDelayParam; }
     juce::AudioParameterFloat* getMixParam() { return mixParam; }
-    juce::AudioParameterFloat* getSaturationParam() { return saturationParam; }
 
 private:
     // Parameters
-    juce::AudioParameterFloat* delayTimeParam = nullptr;
+    juce::AudioParameterFloat* rateParam = nullptr;
+    juce::AudioParameterFloat* depthParam = nullptr;
     juce::AudioParameterFloat* feedbackParam = nullptr;
+    juce::AudioParameterFloat* centerDelayParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
-    juce::AudioParameterFloat* saturationParam = nullptr;
 
     // DSP state
+    float gainSmoothed = 1.0f;
     juce::AudioBuffer<float> delayBuffer;
     int bufferSize = 0;
     int writePosition[2] = {0, 0};
