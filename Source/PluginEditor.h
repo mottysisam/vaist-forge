@@ -15,13 +15,13 @@ private:
     VAIstAudioProcessor& processorRef;
 
     // UI Components
-    juce::Slider delayTimeSlider;
-    juce::Label delayTimeLabel;
-    std::unique_ptr<juce::SliderParameterAttachment> delayTimeAttachment;
+    juce::Slider amountSlider;
+    juce::Label amountLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> amountAttachment;
 
-    juce::Slider feedbackSlider;
-    juce::Label feedbackLabel;
-    std::unique_ptr<juce::SliderParameterAttachment> feedbackAttachment;
+    juce::Slider warmthSlider;
+    juce::Label warmthLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> warmthAttachment;
 
     juce::Slider mixSlider;
     juce::Label mixLabel;
