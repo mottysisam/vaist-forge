@@ -36,6 +36,13 @@ VAIstAudioProcessor::VAIstAudioProcessor()
         1.0f,
         0.5f
     ));
+    addParameter(gainParam = new juce::AudioParameterFloat(
+        "gain",
+        "Gain",
+        0.0f,
+        1.0f,
+        0.5f
+    ));
 }
 
 VAIstAudioProcessor::~VAIstAudioProcessor() {}
@@ -53,9 +60,10 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    juce::ignoreUnused(samplesPerBlock);
     // Initialize default state
     gainSmoothed = 1.0f;
+    this->sampleRate = sampleRate;
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -78,31 +86,32 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float rate = rateParam->get();
-        const float depth = depthParam->get();
-        const float feedback = feedbackParam->get();
-        const float mix = mixParam->get();
+    const float rate = rateParam->get();
+    const float depth = depthParam->get();
+    const float feedback = feedbackParam->get();
+    const float mix = mixParam->get();
+    const float gain = gainParam->get();
 
     // DSP Processing
-        // Convert dB to linear
-        const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
-        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
+    // Convert dB to linear
+    const float gainDb = gain * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
+    const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
 
-        // Smooth gain changes
-        const float targetGain = gainLinear;
-        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
-        const float smoothGain = gainSmoothed;
+    // Smooth gain changes
+    const float targetGain = gainLinear;
+    gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(sampleRate)) * (targetGain - gainSmoothed);
+    const float smoothGain = gainSmoothed;
 
-        // Apply gain to all channels
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    // Apply gain to all channels
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = buffer.getWritePointer(channel);
-
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                channelData[sample] *= smoothGain;
-            }
+            channelData[sample] *= smoothGain;
         }
+    }
 
     // Output sanitization: prevent NaN/Inf from reaching the host
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
