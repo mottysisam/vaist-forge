@@ -4,22 +4,16 @@
 VAIstAudioProcessor::VAIstAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                     .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      cutoff(20.0f),
+      sampleRate(44100.0)
 {
     addParameter(cutoff = new juce::AudioParameterFloat(
-        "cutoff",       // Parameter ID
-        "Cutoff",      // Display name
-        20.0f,          // Minimum frequency
-        20000.0f,       // Maximum frequency
-        2000.0f         // Default frequency
-    ));
-
-    addParameter(resonance = new juce::AudioParameterFloat(
-        "resonance",    // Parameter ID
-        "Resonance",   // Display name
-        0.1f,           // Minimum Q
-        10.0f,          // Maximum Q
-        1.0f            // Default Q
+        "cutoff",    // Parameter ID (lowercase, no spaces)
+        "Cutoff",  // Display name
+        20.0f,          // Minimum
+        20000.0f,          // Maximum
+        1000.0f           // Default
     ));
 }
 
@@ -37,15 +31,14 @@ const juce::String VAIstAudioProcessor::getProgramName(int index) { juce::ignore
 void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newName) { juce::ignoreUnused(index, newName); }
 
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    // Initialize DSP here
+    this->sampleRate = sampleRate;
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
 
-    leftFilter.prepare(spec);
-    rightFilter.prepare(spec);
-
+    highPassFilter.reset();
+    highPassFilter.prepare(spec);
     updateFilter();
 }
 
@@ -53,12 +46,10 @@ void VAIstAudioProcessor::releaseResources() {}
 
 bool VAIstAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
-
     return true;
 }
 
@@ -69,35 +60,26 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     updateFilter();
 
     juce::dsp::AudioBlock<float> block(buffer);
-    leftFilter.process(juce::dsp::ProcessContextReplacing<float>(block.getSingleChannelBlock(0)));
-    rightFilter.process(juce::dsp::ProcessContextReplacing<float>(block.getSingleChannelBlock(buffer.getNumChannels() > 1 ? 1 : 0)));
+    highPassFilter.process(juce::dsp::ProcessContextReplacing<float>(block));
 }
 
 bool VAIstAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* VAIstAudioProcessor::createEditor() { return new VAIstAudioProcessorEditor(*this); }
 
 void VAIstAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    // Save state
     juce::MemoryOutputStream stream(destData, true);
     stream.writeFloat(*cutoff);
-    stream.writeFloat(*resonance);
 }
 
 void VAIstAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    // Load state
-    juce::MemoryInputStream stream(data, sizeInBytes, false);
-    *cutoff = stream.readFloat();
-    *resonance = stream.readFloat();
+    juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
+    cutoff->setValueNotifyingHost(stream.readFloat());
 }
 
-void VAIstAudioProcessor::updateFilter() {
-    float currentCutoff = *cutoff;
-    float currentResonance = *resonance;
-
-    leftFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), currentCutoff, currentResonance);
-    rightFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), currentCutoff, currentResonance);
+void VAIstAudioProcessor::updateFilter()
+{
+    highPassFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, *cutoff);
 }
-
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new VAIstAudioProcessor();
@@ -109,46 +91,41 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
 VAIstAudioProcessorEditor::VAIstAudioProcessorEditor(VAIstAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
-    // Cutoff Slider
-    cutoffSlider.setSliderStyle(juce::Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-    cutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
-    cutoffSlider.setRange(20.0, 20000.0, 1.0);
-    cutoffSlider.setValue(2000.0);
-    addAndMakeVisible(cutoffSlider);
-    cutoffAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.cutoff,
-        cutoffSlider,
-        nullptr
-    );
+    juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
 
-    // Resonance Slider
-    resonanceSlider.setSliderStyle(juce::Slider::SliderStyle::RotaryHorizontalVerticalDrag);
-    resonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
-    resonanceSlider.setRange(0.1, 10.0, 0.01);
-    resonanceSlider.setValue(1.0);
-    addAndMakeVisible(resonanceSlider);
-    resonanceAttachment = std::make_unique<juce::SliderParameterAttachment>(
-        *processorRef.resonance,
-        resonanceSlider,
+    cutoffSlider.setSliderStyle(juce::Slider::SliderStyle::RotaryVerticalDrag);
+    cutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
+    cutoffSlider.setRange(20.0, 20000.0, 1.0);
+    cutoffSlider.setValue(processorRef.getCutoffValue());
+    cutoffSlider.setSkewFactorFromMidPoint(1000.0);
+    addAndMakeVisible(cutoffSlider);
+
+    cutoffLabel.setText("Cutoff", juce::dontSendNotification);
+    cutoffLabel.attachToComponent(&cutoffSlider, true);
+    cutoffLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(cutoffLabel);
+
+    cutoffAttachment = std::make_unique<juce::SliderParameterAttachment>(
+        *processorRef.getCutoffParameter(),
+        cutoffSlider,
         nullptr
     );
 
     setSize(400, 300);
 }
 
-VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {}
+VAIstAudioProcessorEditor::~VAIstAudioProcessorEditor() {
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+}
 
 void VAIstAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+    g.fillAll(juce::Colours::darkgrey);
     g.setColour(juce::Colours::white);
     g.setFont(15.0f);
-    g.drawFittedText("Cutoff", cutoffSlider.getX(), cutoffSlider.getY() - 20, cutoffSlider.getWidth(), 20, juce::Justification::centred, 1);
-    g.drawFittedText("Resonance", resonanceSlider.getX(), resonanceSlider.getY() - 20, resonanceSlider.getWidth(), 20, juce::Justification::centred, 1);
 }
 
 void VAIstAudioProcessorEditor::resized()
 {
-    cutoffSlider.setBounds(50, 50, 150, 100);
-    resonanceSlider.setBounds(200, 50, 150, 100);
+    cutoffSlider.setBounds(getWidth() / 2 - 75, getHeight() / 2 - 75, 150, 150);
 }
