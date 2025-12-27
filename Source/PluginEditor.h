@@ -15,6 +15,14 @@ private:
     VAIstAudioProcessor& processorRef;
 
     // UI Components
+    juce::Slider driveAmountSlider;
+    juce::Label driveAmountLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> driveAmountAttachment;
+
+    juce::Slider toneControlSlider;
+    juce::Label toneControlLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> toneControlAttachment;
+
     juce::Slider volumeSlider;
     juce::Label volumeLabel;
     std::unique_ptr<juce::SliderParameterAttachment> volumeAttachment;

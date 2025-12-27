@@ -8,12 +8,26 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
+    addParameter(driveAmountParam = new juce::AudioParameterFloat(
+        "driveAmount",
+        "Drive",
+        0.0f,
+        1.0f,
+        0.5f
+    ));
+    addParameter(toneControlParam = new juce::AudioParameterFloat(
+        "toneControl",
+        "Tone",
+        0.0f,
+        1.0f,
+        0.5f
+    ));
     addParameter(volumeParam = new juce::AudioParameterFloat(
         "volume",
         "Volume",
         0.0f,
         1.0f,
-        0.5f
+        0.75f
     ));
 }
 
@@ -33,7 +47,7 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize gain smoothing
+    // Initialize default state
     gainSmoothed = 1.0f;
 }
 
@@ -57,28 +71,44 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples = buffer.getNumSamples();
 
     // Read parameter values with defensive clamping
-        const float volume = volumeParam->get();
+    const float driveAmount = driveAmountParam->get();
+    const float toneControl = toneControlParam->get();
+    const float volume = volumeParam->get();
 
     // DSP Processing
-        // Convert dB to linear
-        const float gainDb = volume * 48.0f - 24.0f;  // Range: -24.0 to +24.0 dB
-        const float gainLinear = std::pow(10.0f, gainDb / 20.0f);
+    // Process each channel
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
 
-        // Smooth gain changes
-        const float targetGain = gainLinear;
-        gainSmoothed = gainSmoothed + (20.0f * 0.001f * static_cast<float>(getSampleRate())) * (targetGain - gainSmoothed);
-        const float smoothGain = gainSmoothed;
-
-        // Apply gain to all channels
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            auto* channelData = buffer.getWritePointer(channel);
+            const float dry = channelData[sample];
 
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                channelData[sample] *= smoothGain;
-            }
+            // Apply pre-gain based on drive
+            const float preGain = 1.0f + driveAmount * 11.0f;
+            const float driven = dry * preGain;
+
+            // Apply waveshaping function
+            // Soft clip (cubic)
+            float shaped;
+            if (driven > 1.0f)
+                shaped = 0.666667f;
+            else if (driven < -1.0f)
+                shaped = -0.666667f;
+            else
+                shaped = driven - (driven * driven * driven) / 3.0f;
+
+            // Output compensation
+            const float compensated = shaped * 0.7f;
+
+            // Mix dry/wet - using toneControl as mix
+            channelData[sample] = dry * (1.0f - toneControl) + compensated * toneControl;
+
+            // Apply overall volume
+            channelData[sample] *= volume;
         }
+    }
 
     // Output sanitization: prevent NaN/Inf from reaching the host
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
