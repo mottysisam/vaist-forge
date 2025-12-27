@@ -1,0 +1,170 @@
+# Cloudflare Infrastructure Configuration - Example
+# ========================================
+# This file defines the infrastructure setup for Cloudflare Pages + Workers + D1 + R2 + KV
+#
+# Usage:
+#   1. Copy this file to cloudflare-config.yaml
+#   2. Set your domain and project name
+#   3. Set environment variables:
+#      export CLOUDFLARE_API_TOKEN="your-api-token"
+#      export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+#   4. Run: python cf_infra.py setup --config cloudflare-config.yaml
+#
+# Required API Token Permissions:
+#   - Zone:Read, Zone:Edit (for DNS)
+#   - Pages:Edit (for Pages projects)
+#   - Workers KV Storage:Edit (for KV namespaces)
+#   - Workers R2 Storage:Edit (for R2 buckets)
+#   - Firewall Services:Edit (for WAF rules)
+
+# Cloudflare Credentials
+credentials:
+  # API Token - create at https://dash.cloudflare.com/profile/api-tokens
+  # Required permissions: Zone:Read, Zone:Edit, Pages:Edit, Workers KV:Edit, Workers R2:Edit
+  api_token: "${CLOUDFLARE_API_TOKEN}"
+
+  # Account ID - found in Cloudflare dashboard URL: dash.cloudflare.com/<account_id>
+  account_id: "${CLOUDFLARE_ACCOUNT_ID}"
+
+# Domain Configuration
+domain:
+  # The root domain (must already exist as a zone in Cloudflare)
+  root: "example.com"
+
+  # Zone ID (optional - will be auto-discovered from root domain)
+  # zone_id: "your-zone-id"
+
+# Project Configuration
+project:
+  # Project identifier (used in resource naming)
+  name: "my-project"
+
+  # Path to wrangler.toml (optional - for auto-deriving configuration)
+  wrangler_path: "./apps/backend/wrangler.toml"
+
+  # Naming convention pattern:
+  #   - "bodywave" = {resource}-{env}-{project}-apps-{domain} (enterprise style)
+  #   - "simple" = {env}-{project}-{resource} (startup style)
+  naming_convention: "simple"
+
+# Environment Definitions
+environments:
+  dev:
+    # Worker (API backend)
+    worker:
+      name: "my-project-backend-dev"
+      custom_domain: "api.dev.example.com"
+
+    # Pages (frontend)
+    pages:
+      project_name: "my-project-web-dev"
+      custom_domains:
+        - "dev.example.com"
+        - "app.dev.example.com"
+      production_branch: "dev"
+
+    # D1 Database (SQLite)
+    d1:
+      database_name: "d1-my-project-dev"
+      # database_id: "uuid" # Optional - if already exists
+
+    # KV Namespaces (key-value storage)
+    kv:
+      - name: "kv-my-project-auth-dev"     # Sessions, rate limiting
+      - name: "kv-my-project-cache-dev"    # General caching
+
+    # R2 Buckets (object storage)
+    r2:
+      - name: "r2-my-project-assets-dev"
+        public_access: false  # Serve via Workers
+      - name: "r2-my-project-uploads-dev"
+        public_access: false
+
+  production:
+    worker:
+      name: "my-project-backend"
+      custom_domain: "api.example.com"
+
+    pages:
+      project_name: "my-project-web"
+      custom_domains:
+        - "example.com"
+        - "www.example.com"
+        - "app.example.com"
+      production_branch: "main"
+
+    d1:
+      database_name: "d1-my-project-prod"
+
+    kv:
+      - name: "kv-my-project-auth-prod"
+      - name: "kv-my-project-cache-prod"
+
+    r2:
+      - name: "r2-my-project-assets-prod"
+        public_access: false
+      - name: "r2-my-project-uploads-prod"
+        public_access: false
+
+# Zone-Level Firewall Rules (WAF bypass for specific paths)
+firewall_rules:
+  # Bypass bot protection for health checks (GitHub Actions, monitoring)
+  - name: "health-check-bypass"
+    description: "Bypass bot protection for CI/CD health checks"
+    expression: '(http.request.uri.path eq "/health")'
+    action: "skip"
+    skip_products:
+      - "bic"           # Bot Intelligence Check
+      - "hot"           # Hotlink Protection
+      - "rateLimit"     # Rate Limiting
+      - "securityLevel" # Security Level
+      - "uaBlock"       # User Agent Block
+      - "waf"           # Web Application Firewall
+      - "zoneLockdown"  # Zone Lockdown
+    priority: 1
+    enabled: true
+
+  # Bypass for webhook endpoints
+  - name: "webhook-bypass"
+    description: "Bypass bot protection for webhook endpoints"
+    expression: '(http.request.uri.path contains "/webhook")'
+    action: "skip"
+    skip_products:
+      - "bic"
+      - "hot"
+    priority: 2
+    enabled: true
+
+# DNS Configuration
+dns:
+  # Auto-create CNAME records for custom domains
+  auto_create: true
+
+  # Proxy through Cloudflare (orange cloud - enables CDN, security)
+  proxied: true
+
+  # TTL in seconds (1 = auto when proxied)
+  ttl: 1
+
+# Feature Flags
+features:
+  # Create Pages projects
+  create_pages: true
+
+  # Add custom domains to Pages projects
+  add_custom_domains: true
+
+  # Create DNS CNAME records
+  create_dns_records: true
+
+  # Create firewall rules
+  create_firewall_rules: true
+
+  # Create R2 buckets
+  create_r2_buckets: true
+
+  # Validate SSL certificates after setup
+  validate_ssl: true
+
+  # Dry-run mode (preview changes without applying)
+  dry_run: false

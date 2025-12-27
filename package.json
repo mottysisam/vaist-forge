@@ -1,0 +1,28 @@
+{
+  "name": "vaist",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @vaist/web dev",
+    "dev:backend": "pnpm --filter @vaist/backend dev",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @vaist/web build",
+    "build:backend": "pnpm --filter @vaist/backend build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "db:generate": "pnpm --filter @vaist/backend db:generate",
+    "db:migrate": "pnpm --filter @vaist/backend db:migrate",
+    "db:studio": "pnpm --filter @vaist/backend db:studio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.2"
+  }
+}

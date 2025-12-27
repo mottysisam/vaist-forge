@@ -1,0 +1,59 @@
+{
+  "name": "@vaist/backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "vAIst Backend - AI-powered VST plugin generator API with Hono, Prisma, and D1",
+  "main": "src/server.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "wrangler dev --local --port 4203",
+    "dev": "wrangler dev --local --port 4203",
+    "dev:remote": "wrangler dev --remote --port 4203",
+    "deploy": "echo '!! Use deploy:dev or deploy:prod instead' && exit 1",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:prod": "wrangler deploy --env production",
+    "build": "prisma generate",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "eslint src --quiet",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "wrangler d1 migrations apply d1-vaist-local --local",
+    "db:migrate:create": "tsx scripts/create-migration.ts",
+    "db:migrate:remote:dev": "wrangler d1 migrations apply d1-vaist-dev --remote --env dev",
+    "db:migrate:remote:prod": "wrangler d1 migrations apply d1-vaist-prod --remote --env production",
+    "db:studio": "prisma studio",
+    "clean": "rm -rf node_modules .wrangler"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/adapter-d1": "^7.0.1",
+    "@prisma/client": "^7.0.1",
+    "@vaist/shared": "workspace:^",
+    "better-auth": "^1.4.4",
+    "better-auth-cloudflare": "^0.2.9",
+    "hono": "^4.10.7",
+    "jose": "^6.1.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251128.0",
+    "@types/node": "^20.0.0",
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.18.0",
+    "prisma": "^7.0.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

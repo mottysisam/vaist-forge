@@ -48,3 +48,18 @@ venv/
 
 # Node
 node_modules/
+.next/
+.wrangler/
+dist/
+*.tsbuildinfo
+
+# pnpm
+pnpm-debug.log*
+
+# Cloudflare
+.dev.vars
+*.local.toml
+
+# Prisma
+*.db
+*.db-journal

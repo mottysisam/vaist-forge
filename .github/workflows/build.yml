@@ -8,6 +8,141 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ============================================================================
+  # WASM Build for Browser Preview
+  # Compiles vanilla C++ to WebAssembly using Emscripten
+  # ============================================================================
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.21'
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify Emscripten
+        run: |
+          emcc --version
+          echo "Emscripten installed successfully"
+
+      - name: Create WASM Build Directory
+        run: mkdir -p wasm-build
+
+      - name: Check for WASM Source Files
+        id: check_wasm
+        run: |
+          if [ -f "Source/wasm/processor.cpp" ] && [ -f "Source/wasm/processor.h" ]; then
+            echo "wasm_exists=true" >> $GITHUB_OUTPUT
+            echo "WASM source files found"
+          else
+            echo "wasm_exists=false" >> $GITHUB_OUTPUT
+            echo "No WASM source files found - skipping build"
+          fi
+
+      - name: Compile WASM Module
+        if: steps.check_wasm.outputs.wasm_exists == 'true'
+        run: |
+          cd Source/wasm
+          emcc processor.cpp bindings.cpp \
+            -o ../../wasm-build/vaist-processor.js \
+            -s WASM=1 \
+            -s MODULARIZE=1 \
+            -s EXPORT_ES6=1 \
+            -s EXPORTED_RUNTIME_METHODS='["cwrap","ccall"]' \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s ENVIRONMENT='web,worker' \
+            -s SINGLE_FILE=0 \
+            -s EXPORT_NAME='createVAIstProcessor' \
+            -O3 \
+            --bind
+          echo "WASM compilation complete"
+          ls -la ../../wasm-build/
+
+      - name: Upload WASM Artifact
+        if: steps.check_wasm.outputs.wasm_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vAIst-WASM
+          path: |
+            wasm-build/vaist-processor.js
+            wasm-build/vaist-processor.wasm
+            Source/wasm/descriptor.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ========================================================================
+      # Upload WASM directly to R2 for immediate browser preview
+      # This allows the Preview button to appear while VST3 is still building
+      # ========================================================================
+      - name: Extract Project ID from Branch
+        if: steps.check_wasm.outputs.wasm_exists == 'true'
+        id: project_id
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          if [[ "$BRANCH" =~ ^build/([a-f0-9-]+)$ ]]; then
+            echo "project_id=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "is_build_branch=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_build_branch=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload WASM to R2
+        if: steps.check_wasm.outputs.wasm_exists == 'true' && steps.project_id.outputs.is_build_branch == 'true'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          PROJECT_ID: ${{ steps.project_id.outputs.project_id }}
+        run: |
+          # Install rclone
+          curl https://rclone.org/install.sh | sudo bash
+
+          # Configure rclone for R2
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          acl = private
+          EOF
+
+          # Upload WASM files to R2
+          rclone copy wasm-build/ r2:vaist-plugins/wasm/${PROJECT_ID}/ --include "*.wasm" --include "*.js"
+          rclone copy Source/wasm/ r2:vaist-plugins/wasm/${PROJECT_ID}/ --include "descriptor.json"
+
+          echo "WASM uploaded to R2 at wasm/${PROJECT_ID}/"
+
+      - name: Notify Backend WASM Ready
+        if: steps.check_wasm.outputs.wasm_exists == 'true' && steps.project_id.outputs.is_build_branch == 'true'
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          BACKEND_WEBHOOK_SECRET: ${{ secrets.BACKEND_WEBHOOK_SECRET }}
+          PROJECT_ID: ${{ steps.project_id.outputs.project_id }}
+        run: |
+          # Build JSON payload
+          PAYLOAD="{\"projectId\": \"${PROJECT_ID}\", \"wasmKey\": \"wasm/${PROJECT_ID}/vaist-processor.wasm\"}"
+
+          # Generate HMAC-SHA256 signature (X-Hub-Signature-256 format)
+          SIGNATURE="sha256=$(echo -n "${PAYLOAD}" | openssl dgst -sha256 -hmac "${BACKEND_WEBHOOK_SECRET}" | cut -d' ' -f2)"
+
+          curl -X POST "${BACKEND_URL}/api/v1/build/webhook/wasm-ready" \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: ${SIGNATURE}" \
+            -d "${PAYLOAD}" \
+            --fail-with-body || echo "Backend notification failed (may not be configured)"
+
+  # ============================================================================
+  # Native VST3 Build (macOS and Windows)
+  # ============================================================================
   build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

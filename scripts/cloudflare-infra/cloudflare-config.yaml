@@ -1,0 +1,123 @@
+# Cloudflare Infrastructure Configuration for vAIst
+# ========================================
+# AI-Powered VST3 Plugin Generator
+# Uses Cloudflare D1, R2, KV for serverless persistence
+
+# Cloudflare Credentials (use environment variables)
+# Set via: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+credentials:
+  api_token: "${CLOUDFLARE_API_TOKEN}"
+  account_id: "${CLOUDFLARE_ACCOUNT_ID}"
+
+# Domain Configuration
+domain:
+  root: "vaist.net"
+  zone_id: "c1e30403dfff1b6a9b25be29a362ad67"
+
+# Project Configuration
+project:
+  name: "vaist"
+  wrangler_path: "../../apps/backend/wrangler.toml"
+  naming_convention: "simple"  # {env}-vaist-{resource}
+
+# Environment Definitions
+environments:
+  dev:
+    worker:
+      name: "vaist-backend-dev"
+      custom_domain: "api.dev.vaist.net"
+
+    pages:
+      project_name: "vaist-web-dev"
+      custom_domains:
+        - "dev.vaist.net"
+        - "app.dev.vaist.net"
+      production_branch: "dev"
+
+    d1:
+      database_name: "d1-vaist-dev"
+
+    # KV Namespaces
+    kv:
+      - name: "kv-vaist-auth-dev"
+      - name: "kv-vaist-build-dev"
+      - name: "kv-vaist-rate-limit-dev"
+
+    # R2 Buckets
+    r2:
+      - name: "r2-vaist-plugins-dev"
+        public_access: false
+      - name: "r2-vaist-logs-dev"
+        public_access: false
+
+  production:
+    worker:
+      name: "vaist-backend"
+      custom_domain: "api.vaist.net"
+
+    pages:
+      project_name: "vaist-web"
+      custom_domains:
+        - "vaist.net"
+        - "app.vaist.net"
+        - "www.vaist.net"
+      production_branch: "main"
+
+    d1:
+      database_name: "d1-vaist-prod"
+
+    # KV Namespaces
+    kv:
+      - name: "kv-vaist-auth-prod"
+      - name: "kv-vaist-build-prod"
+      - name: "kv-vaist-rate-limit-prod"
+
+    # R2 Buckets
+    r2:
+      - name: "r2-vaist-plugins-prod"
+        public_access: false
+      - name: "r2-vaist-logs-prod"
+        public_access: false
+
+# Zone-Level Firewall Rules
+firewall_rules:
+  - name: "ci-health-check-bypass"
+    description: "Bypass bot protection for CI/CD health checks"
+    expression: '(http.request.uri.path eq "/health")'
+    action: "skip"
+    skip_products:
+      - "bic"
+      - "hot"
+      - "rateLimit"
+      - "securityLevel"
+      - "uaBlock"
+      - "waf"
+      - "zoneLockdown"
+    priority: 1
+    enabled: true
+
+  - name: "api-webhook-bypass"
+    description: "Bypass bot protection for GitHub webhooks"
+    expression: '(http.request.uri.path contains "/webhook/github")'
+    action: "skip"
+    skip_products:
+      - "bic"
+      - "hot"
+    priority: 2
+    enabled: true
+
+# DNS Configuration
+dns:
+  auto_create: true
+  proxied: true
+  ttl: 1
+
+# Feature Flags
+features:
+  create_pages: true
+  add_custom_domains: true
+  create_dns_records: true
+  create_firewall_rules: true
+  create_r2_buckets: true
+  validate_ssl: true
+  dry_run: false

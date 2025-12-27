@@ -15,17 +15,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The system is a **Distributed Event-Driven Pipeline** with four main components:
 
 ```
-User Prompt → Portal (Next.js) → Orchestrator (FastAPI) → LLM (GPT-4o/Claude) →
-Generated C++ → GitHub Push → GitHub Actions CI/CD → Windows/Mac Builds →
-VST3 Validator → S3 Storage → Download URL → User
+User Prompt → Portal (Next.js) → Backend (Cloudflare Workers) → LLM (Gemini/Claude) →
+Plan Negotiation → C++ Generation → GitHub Push → GitHub Actions CI/CD →
+Windows/Mac Builds → VST3 Validator → R2 Storage → Signed Download URL → User
 ```
 
 ### Components
 
-1. **The Portal** - Next.js frontend on Vercel for prompt submission and real-time build status
-2. **The Orchestrator** - FastAPI Python backend for authentication, LLM integration, and GitHub automation via PyGithub
-3. **The Synthesis Engine** - GPT-4o or Claude 3.5 Sonnet translates natural language to JUCE 8 C++
+1. **The Portal** - Next.js frontend for prompt submission and real-time build status (port 5203)
+2. **The Orchestrator** - Cloudflare Workers (Hono + Prisma/D1) backend with BetterAuth (port 4203)
+3. **The Synthesis Engine** - Gemini 3 Flash primary, Claude Sonnet 4 fallback for plan negotiation
 4. **The Forge** - GitHub Actions with parallel Windows/macOS runners for compilation
+5. **Real-time Updates** - Durable Objects for WebSocket-based build status streaming
 
 ### Code Generation Strategy
 
@@ -39,16 +40,37 @@ Template uses placeholder markers: `/* AI_PARAMETER_START */`, `/* AI_DSP_LOGIC_
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js, React, Vercel |
-| Backend API | FastAPI (Python) |
-| AI Architect | Claude Opus 4.5 (master template, architecture reasoning) |
+| Frontend | Next.js 16, React 19, Tailwind CSS 4 |
+| Backend API | Cloudflare Workers (Hono + TypeScript) |
+| Database | Cloudflare D1 (SQLite) + Prisma 7 |
+| Auth | BetterAuth (Google OAuth) |
+| Real-time | Durable Objects (WebSocket) |
 | AI Coder | Gemini 3 Flash (high-throughput DSP code generation) |
+| AI Fallback | Claude Opus 4.5 (debugging, complex plans) |
 | Plugin Framework | JUCE 8 (C++) |
 | Build System | CMake 3.24+ with FetchContent |
 | CI/CD | GitHub Actions (Windows + macOS matrix) |
 | Compilers | MSVC 2022 (Windows), Xcode 15+ (macOS) |
-| Storage | AWS S3 |
-| Database | PostgreSQL (Supabase) |
+| Storage | Cloudflare R2 (plugins, logs) |
+| Rate Limiting | Cloudflare KV |
+
+## Local Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start backend (port 4203)
+cd apps/backend && pnpm dev
+
+# Start frontend (port 5203)
+cd apps/web && pnpm dev
+```
+
+### Environment URLs
+- Frontend: http://localhost:5203
+- Backend API: http://localhost:4203
+- Auth Callback: http://localhost:4203/auth/callback/google
 
 ## AI Strategy: Hybrid Model Architecture
 
@@ -154,18 +176,37 @@ Critical flags:
 - `/arch:AVX2` (MSVC) / `-march=native` (Unix) - SIMD optimization
 - `COPY_PLUGIN_AFTER_BUILD=FALSE` - Required for cloud builds
 
-## Python Backend Dependencies
+## Backend Configuration
+
+### Cloudflare Secrets (set via wrangler)
 
 ```bash
-pip install google-generativeai anthropic PyGithub fastapi python-dotenv uvicorn
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+wrangler secret put GOOGLE_API_KEY          # Gemini 3 Flash
+wrangler secret put ANTHROPIC_API_KEY       # Claude Opus 4.5 fallback
+wrangler secret put GITHUB_TOKEN            # Repository access
+wrangler secret put BETTER_AUTH_SECRET      # Session signing
+wrangler secret put DOWNLOAD_TOKEN_SECRET   # Signed download URLs
 ```
 
-Required environment variables:
-- `GOOGLE_API_KEY` (Gemini 3 Flash - primary coder)
-- `ANTHROPIC_API_KEY` (Claude Opus 4.5 - architect/fallback)
-- `GITHUB_TOKEN`
-- `DATABASE_URL` (Supabase PostgreSQL)
-- `AWS_S3_BUCKET`, `AWS_CREDENTIALS`
+### Google OAuth Setup
+
+For Google Cloud Console OAuth credentials:
+
+**Authorized JavaScript Origins:**
+```
+http://localhost:5203
+https://vaist.net
+https://dev.vaist.net
+```
+
+**Authorized Redirect URIs:**
+```
+http://localhost:4203/auth/callback/google
+https://api.dev.vaist.net/auth/callback/google
+https://api.vaist.net/auth/callback/google
+```
 
 ## Build State Machine
 

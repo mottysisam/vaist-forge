@@ -41,12 +41,23 @@ graph LR
 |-----------|-----------|
 | Plugin Framework | JUCE 8 (C++) |
 | AI Coder | Gemini 3 Flash (1M context, 220+ tok/sec) |
-| AI Architect | Claude Opus 4.5 (templates, debugging) |
+| AI Architect | Claude Opus 4.5 (fallback, debugging) |
 | Build System | CMake 3.24+ with FetchContent |
 | CI/CD | GitHub Actions (Windows + macOS matrix) |
-| Backend | FastAPI (Python) |
-| Frontend | Next.js on Vercel |
-| Storage | AWS S3 |
+| Backend | Cloudflare Workers (Hono + D1 + Durable Objects) |
+| Frontend | Next.js |
+| Storage | Cloudflare R2 |
+| Auth | BetterAuth (Google OAuth) |
+
+## Local Development
+
+```bash
+# Backend (port 4203)
+cd apps/backend && pnpm dev
+
+# Frontend (port 5203)
+cd apps/web && pnpm dev
+```
 
 ## VST3 Plugin Specs
 

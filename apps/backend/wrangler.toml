@@ -1,0 +1,176 @@
+# vAIst Backend - Cloudflare Workers Configuration
+# AI-powered VST3 Plugin Generator
+
+name = "vaist-backend-local"
+main = "src/server.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Durable Objects for real-time build status streaming
+[durable_objects]
+bindings = [
+  { name = "BUILD_STATUS", class_name = "BuildStatus" }
+]
+
+# DO migrations
+[[migrations]]
+tag = "v1"
+new_classes = ["BuildStatus"]
+
+# Local development D1 database
+[[d1_databases]]
+binding = "DB"
+database_name = "d1-vaist-local"
+database_id = "local"
+migrations_dir = "prisma/migrations"
+
+# KV Namespaces for sessions, build status, and rate limiting
+[[kv_namespaces]]
+binding = "AUTH_KV"
+id = "local-auth-kv"
+preview_id = "local-auth-kv-preview"
+
+[[kv_namespaces]]
+binding = "BUILD_KV"
+id = "local-build-kv"
+preview_id = "local-build-kv-preview"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "local-rate-limit-kv"
+preview_id = "local-rate-limit-kv-preview"
+
+# R2 Bucket for compiled .vst3 plugins
+[[r2_buckets]]
+binding = "PLUGINS_BUCKET"
+bucket_name = "r2-vaist-plugins-local"
+preview_bucket_name = "r2-vaist-plugins-local-preview"
+
+# R2 Bucket for build logs
+[[r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "r2-vaist-logs-local"
+preview_bucket_name = "r2-vaist-logs-local-preview"
+
+[vars]
+NODE_ENV = "development"
+CORS_ORIGIN = "http://localhost:5203"
+BETTER_AUTH_URL = "http://localhost:4203"
+# AI Model Configuration
+DEFAULT_AI_MODEL = "gemini-3-flash-preview"
+# Thinking level: high (default for Gemini 3, maximizes reasoning depth)
+# Note: Secrets set via: wrangler secret put SECRET_NAME
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET - Google OAuth
+#   GOOGLE_API_KEY - Gemini API
+#   ANTHROPIC_API_KEY - Claude fallback
+#   GITHUB_TOKEN - Repository access
+#   BETTER_AUTH_SECRET - Session signing
+#   DOWNLOAD_TOKEN_SECRET - HMAC for signed download URLs
+
+# ============================================
+# Development Environment
+# ============================================
+[env.dev]
+name = "vaist-backend-dev"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[env.dev.durable_objects]
+bindings = [
+  { name = "BUILD_STATUS", class_name = "BuildStatus" }
+]
+
+[[env.dev.migrations]]
+tag = "v1"
+new_classes = ["BuildStatus"]
+
+[[env.dev.routes]]
+pattern = "api.dev.vaist.net"
+custom_domain = true
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "d1-vaist-dev"
+database_id = "c4204b9a-94fe-448f-928e-43e728ec7deb"
+migrations_dir = "prisma/migrations"
+
+[[env.dev.kv_namespaces]]
+binding = "AUTH_KV"
+id = "6c4e465791ce4a51b353c9399dd3e12c"
+
+[[env.dev.kv_namespaces]]
+binding = "BUILD_KV"
+id = "862ca62ee9b7411ea8fe1021041bffcd"
+
+[[env.dev.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "8e6f46096935406ca310b1f4b3ef80c2"
+
+[[env.dev.r2_buckets]]
+binding = "PLUGINS_BUCKET"
+bucket_name = "r2-vaist-plugins-dev"
+
+[[env.dev.r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "r2-vaist-logs-dev"
+
+[env.dev.vars]
+NODE_ENV = "development"
+CORS_ORIGIN = "https://dev.vaist.net"
+BETTER_AUTH_URL = "https://api.dev.vaist.net"
+DEFAULT_AI_MODEL = "gemini-3-flash-preview"
+# Thinking level: high (default for Gemini 3, maximizes reasoning depth)
+
+# ============================================
+# Production Environment
+# ============================================
+[env.production]
+name = "vaist-backend"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[env.production.durable_objects]
+bindings = [
+  { name = "BUILD_STATUS", class_name = "BuildStatus" }
+]
+
+[[env.production.migrations]]
+tag = "v1"
+new_classes = ["BuildStatus"]
+
+[[env.production.routes]]
+pattern = "api.vaist.net"
+custom_domain = true
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "d1-vaist-prod"
+database_id = "89d7ce10-65ac-4db4-a06b-72b5d109df40"
+migrations_dir = "prisma/migrations"
+
+[[env.production.kv_namespaces]]
+binding = "AUTH_KV"
+id = "9c43e771f1584e1eb63d8df810a48a80"
+
+[[env.production.kv_namespaces]]
+binding = "BUILD_KV"
+id = "b47979b2970d4578909644deec6c35c2"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "2f862e1ac80d4ddb8de0fc37044b7712"
+
+[[env.production.r2_buckets]]
+binding = "PLUGINS_BUCKET"
+bucket_name = "r2-vaist-plugins-prod"
+
+[[env.production.r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "r2-vaist-logs-prod"
+
+[env.production.vars]
+NODE_ENV = "production"
+CORS_ORIGIN = "https://vaist.net"
+BETTER_AUTH_URL = "https://api.vaist.net"
+DEFAULT_AI_MODEL = "gemini-3-flash-preview"
+# Thinking level: high (default for Gemini 3, maximizes reasoning depth)
