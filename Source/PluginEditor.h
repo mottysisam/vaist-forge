@@ -15,13 +15,13 @@ private:
     VAIstAudioProcessor& processorRef;
 
     // UI Components
-    juce::Slider driveAmountSlider;
-    juce::Label driveAmountLabel;
-    std::unique_ptr<juce::SliderParameterAttachment> driveAmountAttachment;
+    juce::Slider gainAmountSlider;
+    juce::Label gainAmountLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> gainAmountAttachment;
 
-    juce::Slider mixSlider;
-    juce::Label mixLabel;
-    std::unique_ptr<juce::SliderParameterAttachment> mixAttachment;
+    juce::Slider outputLevelSlider;
+    juce::Label outputLevelLabel;
+    std::unique_ptr<juce::SliderParameterAttachment> outputLevelAttachment;
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VAIstAudioProcessorEditor)
