@@ -133,15 +133,57 @@ export class GitHubService {
       throw new Error(`Failed to trigger workflow: ${response.statusText}`);
     }
 
-    // Wait a moment and get the workflow run ID
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Poll for the workflow run with retries
+    // GitHub can take several seconds to register workflow_dispatch runs
+    const maxRetries = 10;
+    const delayMs = 3000; // 3 seconds between retries
 
-    const runs = await this.getWorkflowRuns(branch);
-    if (runs.length === 0) {
-      throw new Error('Workflow run not found after trigger');
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[GitHub] Waiting for workflow run (attempt ${attempt}/${maxRetries})...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      const runs = await this.getWorkflowRuns(branch);
+      if (runs.length > 0) {
+        console.log(`[GitHub] Found workflow run: ${runs[0].id}`);
+        return runs[0].id;
+      }
+
+      // Also try querying by workflow_dispatch event
+      const dispatchRuns = await this.getRecentDispatchRuns();
+      if (dispatchRuns.length > 0) {
+        console.log(`[GitHub] Found dispatch run: ${dispatchRuns[0].id}`);
+        return dispatchRuns[0].id;
+      }
     }
 
-    return runs[0].id;
+    throw new Error(`Workflow run not found after ${maxRetries} attempts (${maxRetries * delayMs / 1000}s)`);
+  }
+
+  /**
+   * Get recent workflow_dispatch runs (last 5 minutes)
+   */
+  private async getRecentDispatchRuns(): Promise<WorkflowRun[]> {
+    const response = await this.request(
+      `/repos/${this.owner}/${this.repo}/actions/runs?event=workflow_dispatch&per_page=5`
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = (await response.json()) as { workflow_runs: GitHubWorkflowRun[] };
+
+    // Filter to runs created in last 5 minutes
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    return data.workflow_runs
+      .filter((run) => new Date(run.created_at).getTime() > fiveMinutesAgo)
+      .map((run) => ({
+        id: run.id,
+        status: run.status,
+        conclusion: run.conclusion,
+        htmlUrl: run.html_url,
+        createdAt: run.created_at,
+      }));
   }
 
   /**
