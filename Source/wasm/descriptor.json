@@ -1,0 +1,96 @@
+{
+  "name": "AdvancedFlangerOpus",
+  "vendor": "vAIst",
+  "version": "1.0.0",
+  "sdkVersion": "2.0.0",
+  "thumbnail": "",
+  "keywords": [
+    "effect",
+    "audio",
+    "wasm"
+  ],
+  "isInstrument": false,
+  "description": "A professional-grade flanger effect with deep modulation capabilities, multiple LFO waveforms, stereo enhancement, and tempo sync. Designed for sound designers and producers who demand precise control over their flanging effects, from subtle motion to extreme jet-plane sweeps.",
+  "parameters": [
+    {
+      "id": "rate",
+      "name": "Rate",
+      "type": "float",
+      "min": 0.01,
+      "max": 20,
+      "default": 0.5,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "depth",
+      "name": "Depth",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "type": "float",
+      "min": -99,
+      "max": 99,
+      "default": 30,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "manualDelay",
+      "name": "Manual",
+      "type": "float",
+      "min": 0.1,
+      "max": 10,
+      "default": 2,
+      "unit": "ms",
+      "choices": []
+    },
+    {
+      "id": "lfoWaveform",
+      "name": "LFO Shape",
+      "type": "float",
+      "min": 0,
+      "max": 4,
+      "default": 0,
+      "unit": "",
+      "choices": []
+    },
+    {
+      "id": "stereoPhase",
+      "name": "Stereo Phase",
+      "type": "float",
+      "min": 0,
+      "max": 180,
+      "default": 90,
+      "unit": "deg",
+      "choices": []
+    },
+    {
+      "id": "mix",
+      "name": "Mix",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "outputGain",
+      "name": "Output",
+      "type": "float",
+      "min": -12,
+      "max": 12,
+      "default": 0,
+      "unit": "dB",
+      "choices": []
+    }
+  ]
+}
