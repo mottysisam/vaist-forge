@@ -1,0 +1,86 @@
+{
+  "name": "AdvancedFlangerGemini",
+  "vendor": "vAIst",
+  "version": "1.0.0",
+  "sdkVersion": "2.0.0",
+  "thumbnail": "",
+  "keywords": [
+    "effect",
+    "audio",
+    "wasm"
+  ],
+  "isInstrument": false,
+  "description": "Studio-grade stereo flanger with multi-waveform modulation and variable stereo spread.",
+  "parameters": [
+    {
+      "id": "rate",
+      "name": "LFO Rate",
+      "type": "float",
+      "min": 0.01,
+      "max": 10,
+      "default": 0.5,
+      "unit": "Hz",
+      "choices": []
+    },
+    {
+      "id": "depth",
+      "name": "Mod Depth",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 60,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "manual",
+      "name": "Manual Delay",
+      "type": "float",
+      "min": 0.1,
+      "max": 15,
+      "default": 2,
+      "unit": "ms",
+      "choices": []
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "type": "float",
+      "min": -95,
+      "max": 95,
+      "default": 40,
+      "unit": "%",
+      "choices": []
+    },
+    {
+      "id": "waveform",
+      "name": "Wave Shape",
+      "type": "float",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": "",
+      "choices": []
+    },
+    {
+      "id": "spread",
+      "name": "Stereo Spread",
+      "type": "float",
+      "min": 0,
+      "max": 180,
+      "default": 0,
+      "unit": "deg",
+      "choices": []
+    },
+    {
+      "id": "mix",
+      "name": "Dry/Wet",
+      "type": "float",
+      "min": 0,
+      "max": 100,
+      "default": 50,
+      "unit": "%",
+      "choices": []
+    }
+  ]
+}

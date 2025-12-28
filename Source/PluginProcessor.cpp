@@ -8,33 +8,47 @@ VAIstAudioProcessor::VAIstAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Initialize parameters
-    addParameter(delayTimeParam = new juce::AudioParameterFloat(
-        "delayTime",
-        "Delay Time",
-        0.01f,
-        1.0f,
-        0.3f
-    ));
-    addParameter(feedbackParam = new juce::AudioParameterFloat(
-        "feedback",
-        "Feedback",
-        0.0f,
-        0.95f,
+    addParameter(rateParam = new juce::AudioParameterFloat(
+        juce::ParameterID("rate", 1),
+        "LFO Rate",
+        juce::NormalisableRange<float>(0.01f, 10.0f),
         0.5f
     ));
-    addParameter(mixParam = new juce::AudioParameterFloat(
-        "mix",
-        "Mix",
-        0.0f,
-        1.0f,
-        0.7f
+    addParameter(depthParam = new juce::AudioParameterFloat(
+        juce::ParameterID("depth", 1),
+        "Mod Depth",
+        juce::NormalisableRange<float>(0.0f, 100.0f),
+        60.0f
     ));
-    addParameter(saturationParam = new juce::AudioParameterFloat(
-        "saturation",
-        "Saturation",
-        0.0f,
-        1.0f,
-        0.2f
+    addParameter(manualParam = new juce::AudioParameterFloat(
+        juce::ParameterID("manual", 1),
+        "Manual Delay",
+        juce::NormalisableRange<float>(0.1f, 15.0f),
+        2.0f
+    ));
+    addParameter(feedbackParam = new juce::AudioParameterFloat(
+        juce::ParameterID("feedback", 1),
+        "Feedback",
+        juce::NormalisableRange<float>(-95.0f, 95.0f),
+        40.0f
+    ));
+    addParameter(waveformParam = new juce::AudioParameterFloat(
+        juce::ParameterID("waveform", 1),
+        "Wave Shape",
+        juce::NormalisableRange<float>(0.0f, 3.0f),
+        0.0f
+    ));
+    addParameter(spreadParam = new juce::AudioParameterFloat(
+        juce::ParameterID("spread", 1),
+        "Stereo Spread",
+        juce::NormalisableRange<float>(0.0f, 180.0f),
+        0.0f
+    ));
+    addParameter(mixParam = new juce::AudioParameterFloat(
+        juce::ParameterID("mix", 1),
+        "Dry/Wet",
+        juce::NormalisableRange<float>(0.0f, 100.0f),
+        50.0f
     ));
 }
 
@@ -54,12 +68,14 @@ void VAIstAudioProcessor::changeProgramName(int index, const juce::String& newNa
 void VAIstAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(sampleRate, samplesPerBlock);
-    // Initialize delay buffer
-    bufferSize = static_cast<int>(sampleRate * 1.0 + 1);
+    // Initialize flanger delay buffer (max 50ms for flanger)
+    bufferSize = static_cast<int>(sampleRate * 0.05 + 1);
     delayBuffer.setSize(2, bufferSize);
     delayBuffer.clear();
     writePosition[0] = 0;
     writePosition[1] = 0;
+    lfoPhase[0] = 0.0f;
+    lfoPhase[1] = 0.25f;  // Stereo offset for wider sound
 }
 
 void VAIstAudioProcessor::releaseResources() {}
@@ -81,20 +97,29 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     const int numSamples = buffer.getNumSamples();
 
-    // Read parameter values with defensive clamping
-        const float delayTime = delayTimeParam->get();
+    // Read parameter values
+        const float rate = rateParam->get();
+        const float depth = depthParam->get();
+        const float manual = manualParam->get();
         const float feedback = feedbackParam->get();
+        const float waveform = waveformParam->get();
+        const float spread = spreadParam->get();
         const float mix = mixParam->get();
-        const float saturation = saturationParam->get();
 
     // DSP Processing
-        // Calculate delay in samples
-        const float delaySamples = delayTime * 1000.0f * 0.001f * static_cast<float>(getSampleRate());
-        const int delayInt = static_cast<int>(delaySamples);
-        const float delayFrac = delaySamples - static_cast<float>(delayInt);
+        // Flanger processing (modulated delay with LFO)
+        const float sampleRateFloat = static_cast<float>(getSampleRate());
 
-        // Process each channel
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        // Calculate LFO parameters
+        const float lfoFreq = rate;  // LFO rate in Hz
+        const float lfoPhaseInc = lfoFreq / sampleRateFloat;
+
+        // Flanger delay range: 1-10ms modulated by LFO
+        const float minDelay = 0.001f * sampleRateFloat;  // 1ms in samples
+        const float maxDelay = 0.010f * sampleRateFloat;  // 10ms in samples
+        const float delayRange = (maxDelay - minDelay) * depth;
+
+        for (int channel = 0; channel < juce::jmin(buffer.getNumChannels(), 2); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
             auto* delayData = delayBuffer.getWritePointer(channel);
@@ -102,6 +127,12 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             for (int sample = 0; sample < numSamples; ++sample)
             {
                 const float dry = channelData[sample];
+
+                // Calculate modulated delay time using LFO
+                const float lfoValue = 0.5f * (1.0f + std::sin(2.0f * juce::MathConstants<float>::pi * lfoPhase[channel]));
+                const float delaySamples = minDelay + lfoValue * delayRange;
+                const int delayInt = juce::jlimit(1, bufferSize - 2, static_cast<int>(delaySamples));
+                const float delayFrac = delaySamples - static_cast<float>(delayInt);
 
                 // Read from delay buffer with linear interpolation
                 int readPos = writePosition[channel] - delayInt;
@@ -118,6 +149,11 @@ void VAIstAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 writePosition[channel]++;
                 if (writePosition[channel] >= bufferSize)
                     writePosition[channel] = 0;
+
+                // Increment LFO phase
+                lfoPhase[channel] += lfoPhaseInc;
+                if (lfoPhase[channel] >= 1.0f)
+                    lfoPhase[channel] -= 1.0f;
 
                 // Mix dry/wet
                 channelData[sample] = dry * (1.0f - mix) + delayed * mix;
